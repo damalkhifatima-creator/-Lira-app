@@ -2,11 +2,9 @@
 import React from 'react';
 import { ArrowLeft, CheckCircle, ShieldCheck, Zap } from 'lucide-react';
 
-const Hero: React.FC<{ onStart: () => void }> = ({ onStart }) => {
+const Hero: React.FC<{ onStart: () => void; onHowItWorks: () => void }> = ({ onStart, onHowItWorks }) => {
   return (
     <section className="relative overflow-hidden pt-4 md:pt-8">
-      {/* Background Watermark Removed */}
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12 items-center">
         <div className="space-y-6 md:space-y-8 z-10 text-center md:text-right">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] md:text-xs font-bold">
@@ -27,7 +25,10 @@ const Hero: React.FC<{ onStart: () => void }> = ({ onStart }) => {
               ابدأ التقييم
               <ArrowLeft size={18} />
             </button>
-            <button className="px-8 py-4 glass rounded-2xl font-bold text-white hover:bg-white/5 transition-colors border border-white/10 flex items-center justify-center gap-2">
+            <button 
+              onClick={onHowItWorks}
+              className="px-8 py-4 glass rounded-2xl font-bold text-white hover:bg-white/5 transition-colors border border-white/10 flex items-center justify-center gap-2"
+            >
               <Zap size={18} className="text-emerald-400" />
               كيف يعمل؟
             </button>

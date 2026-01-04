@@ -77,5 +77,12 @@ export const INITIAL_SETTINGS: AppSettings = {
     primaryColor: '#10b981',
     themeMode: 'glass'
   },
+  services: {
+    supportLink: 'https://wa.me/963',
+    newsTicker: 'نظام الانتقال النقدي 2026 يعمل بكفاءة عالية في جميع المحافظات.',
+    showConverter: true,
+    showGallery: true,
+    showNews: true
+  },
   conversionFactor: 100
 };

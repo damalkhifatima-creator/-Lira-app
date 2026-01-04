@@ -1,15 +1,18 @@
 
 import React, { useState } from 'react';
-import { Grid, Eye, ShieldCheck, ShoppingCart, X, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Eye, ShieldCheck, ShoppingCart, X } from 'lucide-react';
 import { Banknote } from '../../types';
-import { INITIAL_BANKNOTES } from '../../constants';
 
-const BanknoteGallery: React.FC = () => {
+interface BanknoteGalleryProps {
+  banknotes: Banknote[];
+}
+
+const BanknoteGallery: React.FC<BanknoteGalleryProps> = ({ banknotes }) => {
   const [selectedBanknote, setSelectedBanknote] = useState<Banknote | null>(null);
   const [side, setSide] = useState<'front' | 'back'>('front');
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-12 pb-24">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h2 className="text-3xl font-black mb-2">دليل الفئات النقدية الجديدة</h2>
@@ -22,11 +25,14 @@ const BanknoteGallery: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {INITIAL_BANKNOTES.map((note) => (
+        {banknotes.map((note) => (
           <div 
             key={note.id}
             className="group glass rounded-3xl overflow-hidden border border-white/10 hover:border-emerald-500/50 transition-all cursor-pointer shadow-xl hover:shadow-emerald-500/10"
-            onClick={() => setSelectedBanknote(note)}
+            onClick={() => {
+              setSelectedBanknote(note);
+              setSide('front');
+            }}
           >
             <div className="aspect-[2/1] relative overflow-hidden">
               <img 
@@ -55,7 +61,7 @@ const BanknoteGallery: React.FC = () => {
                 </div>
               </div>
               <p className="text-sm text-gray-400 line-clamp-2">
-                تتميز هذه الفئة بميزات أمان متقدمة تشمل {note.securityFeatures[0]} و{note.securityFeatures[1]}.
+                {note.purchasingPower}
               </p>
               <button className="w-full py-3 rounded-xl border border-white/10 group-hover:bg-white/5 transition-colors text-sm font-bold flex items-center justify-center gap-2">
                 عرض التفاصيل الكاملة
@@ -69,7 +75,7 @@ const BanknoteGallery: React.FC = () => {
       {selectedBanknote && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setSelectedBanknote(null)} />
-          <div className="relative w-full max-w-5xl glass rounded-[2.5rem] border border-white/10 overflow-hidden animate-in fade-in zoom-in duration-300">
+          <div className="relative w-full max-w-5xl glass rounded-[2.5rem] border border-white/10 overflow-hidden animate-in fade-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setSelectedBanknote(null)}
               className="absolute top-6 left-6 p-2 hover:bg-white/10 rounded-full transition-colors z-10"
@@ -101,7 +107,7 @@ const BanknoteGallery: React.FC = () => {
                     {selectedBanknote.securityFeatures.map((feature, idx) => (
                       <div key={idx} className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/5">
                         <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                        <span className="text-gray-300 font-medium">{feature}</span>
+                        <span className="text-gray-300 font-medium text-sm">{feature}</span>
                       </div>
                     ))}
                   </div>

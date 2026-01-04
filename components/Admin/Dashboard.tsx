@@ -1,29 +1,51 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   LayoutDashboard, Settings, Image as ImageIcon, LogOut, 
-  Save, Palette, Clock, Upload, X, Menu, Laptop, Tablet, Smartphone,
-  Circle, Square, RectangleHorizontal
+  Save, Clock, Upload, X, Menu, Laptop, Tablet, Smartphone,
+  Circle, Square, RectangleHorizontal, Grid, Edit3, Users, Search,
+  User as UserIcon, Shield, Headset, Megaphone, ToggleLeft, ToggleRight,
+  Coins
 } from 'lucide-react';
-import { AppSettings } from '../../types';
+import { AppSettings, Banknote, User } from '../../types';
 
 interface DashboardProps {
   settings: AppSettings;
   setSettings: (s: AppSettings) => void;
+  banknotes: Banknote[];
+  setBanknotes: (b: Banknote[]) => void;
+  users: User[];
   onLogout: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'system' | 'visual' | 'maintenance'>('system');
+const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes, setBanknotes, users, onLogout }) => {
+  const [activeTab, setActiveTab] = useState<'system' | 'banknotes' | 'users' | 'services' | 'maintenance'>('system');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [userSearch, setUserSearch] = useState('');
+  
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => 
+      u.name.toLowerCase().includes(userSearch.toLowerCase()) || 
+      u.accountNumber.includes(userSearch)
+    );
+  }, [users, userSearch]);
+
+  const handleInstantImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (data: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Immediate UI update using ObjectURL
+      const previewUrl = URL.createObjectURL(file);
+      callback(previewUrl);
+
+      // Async persistent storage conversion
       const reader = new FileReader();
       reader.onloadend = () => {
-        setSettings({ ...settings, logoUrl: reader.result as string });
+        callback(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -31,7 +53,9 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
 
   const navItems = [
     { id: 'system', label: 'إعدادات النظام', icon: Settings },
-    { id: 'visual', label: 'الهوية البصرية', icon: Palette },
+    { id: 'banknotes', label: 'قوالب الفئات', icon: Grid },
+    { id: 'users', label: 'إدارة المستخدمين', icon: Users },
+    { id: 'services', label: 'الخدمات الذكية', icon: Megaphone },
     { id: 'maintenance', label: 'وضع الصيانة', icon: Clock },
   ];
 
@@ -41,6 +65,18 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
       case 'square': return 'rounded-2xl';
       case 'rectangle': return 'rounded-xl';
       default: return 'rounded-2xl';
+    }
+  };
+
+  const toggleService = (key: keyof typeof settings.services) => {
+    if (typeof settings.services[key] === 'boolean') {
+      setSettings({
+        ...settings,
+        services: {
+          ...settings.services,
+          [key]: !settings.services[key]
+        }
+      });
     }
   };
 
@@ -57,7 +93,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
         </button>
       </div>
 
-      {/* Sidebar (Responsive Overlay for Mobile) */}
+      {/* Sidebar */}
       <aside className={`
         fixed inset-y-0 right-0 w-72 md:w-64 lg:w-80 border-l border-white/5 p-6 flex flex-col glass z-[90] transition-transform duration-300
         ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0 md:static'}
@@ -108,7 +144,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
           </button>
         </header>
 
-        <div className="max-w-5xl mx-auto grid grid-cols-1 gap-6 pb-20">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 gap-6 pb-24">
           {activeTab === 'system' && (
             <div className="space-y-6 animate-in fade-in duration-500">
               <div className="glass p-6 md:p-8 rounded-3xl border border-white/5">
@@ -187,7 +223,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
                       </div>
 
                       <div className="flex flex-wrap gap-2 pt-2">
-                        <input type="file" ref={logoInputRef} onChange={handleLogoUpload} className="hidden" accept="image/*" />
+                        <input type="file" ref={logoInputRef} onChange={(e) => handleInstantImageUpload(e, (url) => setSettings({ ...settings, logoUrl: url }))} className="hidden" accept="image/*" />
                         <button 
                             onClick={() => logoInputRef.current?.click()}
                             className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold text-sm transition-all"
@@ -206,6 +242,204 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
                    </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'banknotes' && (
+            <div className="space-y-6 animate-in fade-in duration-500">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 {banknotes.map((note) => (
+                   <div key={note.id} className="glass p-6 rounded-3xl border border-white/5 flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 emerald-gradient rounded-xl flex items-center justify-center font-bold">{note.value}</div>
+                            <h4 className="font-bold">{note.name}</h4>
+                         </div>
+                         <button 
+                            onClick={() => setEditingNoteId(editingNoteId === note.id ? null : note.id)}
+                            className={`p-2 rounded-lg transition-colors ${editingNoteId === note.id ? 'bg-emerald-500 text-white' : 'bg-white/5 hover:bg-white/10'}`}
+                         >
+                            <Edit3 size={18} />
+                         </button>
+                      </div>
+
+                      {editingNoteId === note.id ? (
+                        <div className="space-y-4 mt-2 animate-in slide-in-from-top-2">
+                           <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                 <label className="text-[10px] text-gray-500 font-bold">الاسم</label>
+                                 <input 
+                                    type="text" 
+                                    value={note.name} 
+                                    onChange={(e) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, name: e.target.value} : n))}
+                                    className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-sm outline-none" 
+                                 />
+                              </div>
+                              <div className="space-y-2">
+                                 <label className="text-[10px] text-gray-500 font-bold">القيمة</label>
+                                 <input 
+                                    type="number" 
+                                    value={note.value} 
+                                    onChange={(e) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, value: Number(e.target.value)} : n))}
+                                    className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-sm outline-none" 
+                                 />
+                              </div>
+                           </div>
+                           
+                           <div className="space-y-2">
+                              <label className="text-[10px] text-gray-500 font-bold">ميزات الأمان (مفصولة بفاصلة)</label>
+                              <textarea 
+                                value={note.securityFeatures.join(', ')} 
+                                onChange={(e) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, securityFeatures: e.target.value.split(',').map(s => s.trim())} : n))}
+                                className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-sm outline-none h-20 resize-none" 
+                              />
+                           </div>
+
+                           <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                 <label className="text-[10px] text-gray-500 font-bold">الوجه الأمامي</label>
+                                 <div className="aspect-[2/1] glass rounded-xl overflow-hidden relative cursor-pointer group" onClick={() => frontInputRef.current?.click()}>
+                                    <img src={note.frontImage} className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity" />
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                       <Upload size={20} />
+                                    </div>
+                                    <input 
+                                        type="file" 
+                                        className="hidden" 
+                                        onChange={(e) => handleInstantImageUpload(e, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, frontImage: url} : n)))} 
+                                        accept="image/*"
+                                    />
+                                 </div>
+                              </div>
+                              <div className="space-y-2">
+                                 <label className="text-[10px] text-gray-500 font-bold">الوجه الخلفي</label>
+                                 <div className="aspect-[2/1] glass rounded-xl overflow-hidden relative cursor-pointer group" onClick={() => backInputRef.current?.click()}>
+                                    <img src={note.backImage} className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity" />
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                       <Upload size={20} />
+                                    </div>
+                                    <input 
+                                        type="file" 
+                                        className="hidden" 
+                                        onChange={(e) => handleInstantImageUpload(e, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, backImage: url} : n)))} 
+                                        accept="image/*"
+                                    />
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 opacity-50">
+                           <img src={note.frontImage} className="w-16 h-8 rounded-lg object-cover border border-white/10" />
+                           <img src={note.backImage} className="w-16 h-8 rounded-lg object-cover border border-white/10" />
+                        </div>
+                      )}
+                   </div>
+                 ))}
+               </div>
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="space-y-6 animate-in fade-in duration-500">
+               <div className="glass p-6 md:p-8 rounded-3xl border border-white/5 space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                     <h3 className="text-lg font-bold">إدارة المواطنين المسجلين</h3>
+                     <div className="relative w-full sm:w-72">
+                        <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                        <input 
+                            type="text" 
+                            placeholder="بحث بالاسم أو رقم الحساب..."
+                            value={userSearch}
+                            onChange={(e) => setUserSearch(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 p-3 pr-10 rounded-xl outline-none focus:border-emerald-500/50 text-sm"
+                        />
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                     {filteredUsers.length > 0 ? filteredUsers.map((user, idx) => (
+                        <div key={idx} className="glass p-5 rounded-2xl border border-white/5 flex items-center gap-4 hover:border-emerald-500/30 transition-all group">
+                           <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-emerald-500/20 group-hover:border-emerald-500/50 transition-colors">
+                              {user.photoUrl ? (
+                                <img src={user.photoUrl} className="w-full h-full object-cover" />
+                              ) : (
+                                <UserIcon className="m-3 text-emerald-400" />
+                              )}
+                           </div>
+                           <div className="flex-1 overflow-hidden">
+                              <h5 className="font-bold text-sm truncate">{user.name}</h5>
+                              <div className="flex items-center gap-2 mt-1">
+                                 <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">#{user.accountNumber}</span>
+                                 <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Active</span>
+                              </div>
+                           </div>
+                        </div>
+                     )) : (
+                        <div className="col-span-full py-20 text-center space-y-4">
+                           <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto">
+                              <Users className="text-gray-700" size={40} />
+                           </div>
+                           <p className="text-gray-500 font-bold">لا يوجد مواطنين يطابقون البحث</p>
+                        </div>
+                     )}
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {activeTab === 'services' && (
+            <div className="space-y-6 animate-in fade-in duration-500">
+               <div className="glass p-6 md:p-8 rounded-3xl border border-white/5 space-y-8">
+                  <h3 className="text-lg font-bold border-b border-white/5 pb-4">إدارة الخدمات والميزات</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div className="space-y-4">
+                        <label className="text-xs font-bold text-gray-400">رابط الدعم الفني (WhatsApp)</label>
+                        <div className="relative">
+                           <Headset className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                           <input 
+                              type="text"
+                              value={settings.services.supportLink}
+                              onChange={(e) => setSettings({...settings, services: {...settings.services, supportLink: e.target.value}})}
+                              className="w-full bg-white/5 border border-white/10 p-4 pr-12 rounded-xl outline-none"
+                              placeholder="https://wa.me/..."
+                           />
+                        </div>
+                     </div>
+                     <div className="space-y-4">
+                        <label className="text-xs font-bold text-gray-400">نص شريط التنبيهات</label>
+                        <div className="relative">
+                           <Megaphone className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                           <input 
+                              type="text"
+                              value={settings.services.newsTicker}
+                              onChange={(e) => setSettings({...settings, services: {...settings.services, newsTicker: e.target.value}})}
+                              className="w-full bg-white/5 border border-white/10 p-4 pr-12 rounded-xl outline-none"
+                              placeholder="اكتب التنبيه هنا..."
+                           />
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4">
+                     {[
+                        { id: 'showConverter', label: 'تفعيل المحول السريع', icon: Coins },
+                        { id: 'showGallery', label: 'تفعيل دليل الفئات', icon: Grid },
+                        { id: 'showNews', label: 'تفعيل شريط الأخبار', icon: Megaphone },
+                     ].map((service) => (
+                        <button 
+                           key={service.id}
+                           onClick={() => toggleService(service.id as any)}
+                           className={`p-6 rounded-3xl border flex flex-col items-center gap-4 transition-all ${settings.services[service.id as keyof typeof settings.services] ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/10 opacity-60'}`}
+                        >
+                           <service.icon size={24} className={settings.services[service.id as keyof typeof settings.services] ? 'text-emerald-400' : 'text-gray-500'} />
+                           <span className="text-sm font-bold">{service.label}</span>
+                           {settings.services[service.id as keyof typeof settings.services] ? <ToggleRight className="text-emerald-400" /> : <ToggleLeft className="text-gray-700" />}
+                        </button>
+                     ))}
+                  </div>
+               </div>
             </div>
           )}
 
@@ -256,36 +490,6 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
                   />
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab === 'visual' && (
-            <div className="glass p-6 md:p-8 rounded-3xl border border-white/5 space-y-6 animate-in fade-in duration-500">
-               <h3 className="text-lg font-bold border-b border-white/5 pb-4">تخصيص الهوية البصرية</h3>
-               <div className="space-y-8">
-                  <div className="space-y-4">
-                    <label className="text-sm font-bold text-gray-400">لون النظام الرئيسي</label>
-                    <div className="flex flex-wrap gap-4">
-                      {['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#e11d48'].map(color => (
-                        <button 
-                          key={color}
-                          onClick={() => setSettings({ ...settings, visual: { ...settings.visual, primaryColor: color }})}
-                          className={`w-12 h-12 rounded-2xl border-2 transition-all duration-300 ${settings.visual.primaryColor === color ? 'border-white scale-110 shadow-[0_0_20px_rgba(255,255,255,0.2)]' : 'border-transparent opacity-40 hover:opacity-100'}`}
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="p-6 bg-white/5 rounded-2xl border border-white/5">
-                    <h4 className="font-bold text-sm mb-2">معاينة الوضع الحالي</h4>
-                    <p className="text-xs text-gray-500 mb-4">يؤثر هذا اللون على الأيقونات، الأزرار، والخطوط المميزة في الواجهة الرئيسية.</p>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: settings.visual.primaryColor }} />
-                        <span className="text-sm font-mono">{settings.visual.primaryColor}</span>
-                    </div>
-                  </div>
-               </div>
             </div>
           )}
         </div>

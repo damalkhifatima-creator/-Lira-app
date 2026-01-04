@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Calculator, Coins, Grid, ShieldCheck, Lock, User as UserIcon, Home, Clock, LogOut } from 'lucide-react';
+import { Layout, Calculator, Coins, Grid, ShieldCheck, Lock, User as UserIcon, Home, Clock, LogOut, Megaphone, Headset } from 'lucide-react';
 import Header from './components/Layout/Header';
 import Hero from './components/Home/Hero';
 import ValuationCalculator from './components/Calculator/ValuationCalculator';
@@ -10,27 +10,48 @@ import BanknoteGallery from './components/Gallery/BanknoteGallery';
 import PinPad from './components/Admin/PinPad';
 import Dashboard from './components/Admin/Dashboard';
 import AuthModal from './components/User/AuthModal';
-import { AppSettings, NumberMode, User } from './types';
-import { INITIAL_SETTINGS } from './constants';
+import HowItWorksModal from './components/Home/HowItWorksModal';
+import { AppSettings, NumberMode, User, Banknote } from './types';
+import { INITIAL_SETTINGS, INITIAL_BANKNOTES } from './constants';
 
 const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showPinPad, setShowPinPad] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+  
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('syr_user_v5');
     return saved ? JSON.parse(saved) : null;
   });
+
+  const [allUsers, setAllUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('syr_all_users_v5');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [activeTab, setActiveTab] = useState<'home' | 'calc' | 'conv' | 'gallery'>('home');
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('syr_app_settings_v5');
     return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
+  });
+  const [banknotes, setBanknotes] = useState<Banknote[]>(() => {
+    const saved = localStorage.getItem('syr_banknotes_v5');
+    return saved ? JSON.parse(saved) : INITIAL_BANKNOTES;
   });
   const [numberMode, setNumberMode] = useState<NumberMode>('latin');
 
   useEffect(() => {
     localStorage.setItem('syr_app_settings_v5', JSON.stringify(settings));
   }, [settings]);
+
+  useEffect(() => {
+    localStorage.setItem('syr_banknotes_v5', JSON.stringify(banknotes));
+  }, [banknotes]);
+
+  useEffect(() => {
+    localStorage.setItem('syr_all_users_v5', JSON.stringify(allUsers));
+  }, [allUsers]);
 
   useEffect(() => {
     if (user) {
@@ -57,11 +78,15 @@ const App: React.FC = () => {
     return false;
   };
 
+  const handleRegisterUser = (newUser: User) => {
+    setUser(newUser);
+    setAllUsers(prev => [...prev, newUser]);
+  };
+
   const handleLogoutUser = () => {
     setUser(null);
   };
 
-  // Maintenance Check
   if (settings.maintenance.isPaused && !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617] text-center">
@@ -89,7 +114,16 @@ const App: React.FC = () => {
   }
 
   if (isAdmin) {
-    return <Dashboard settings={settings} setSettings={setSettings} onLogout={() => setIsAdmin(false)} />;
+    return (
+      <Dashboard 
+        settings={settings} 
+        setSettings={setSettings} 
+        banknotes={banknotes}
+        setBanknotes={setBanknotes}
+        users={allUsers}
+        onLogout={() => setIsAdmin(false)} 
+      />
+    );
   }
 
   const navItems = [
@@ -112,7 +146,21 @@ const App: React.FC = () => {
         user={user}
       />
 
-      <main className="container mx-auto px-4 pt-24 space-y-8 md:space-y-12">
+      {settings.services.showNews && settings.services.newsTicker && (
+        <div className="fixed top-[64px] md:top-[80px] left-0 right-0 z-40 bg-emerald-500/10 backdrop-blur-md border-b border-emerald-500/20 overflow-hidden h-10 flex items-center">
+          <div className="flex items-center gap-2 px-4 bg-emerald-500 h-full text-white font-bold text-xs shrink-0 z-10 shadow-lg">
+            <Megaphone size={14} />
+            تنبيه
+          </div>
+          <div className="whitespace-nowrap flex animate-marquee pr-[100%]">
+             <span className="text-xs font-bold px-4">{settings.services.newsTicker}</span>
+             <span className="text-xs font-bold px-4">{settings.services.newsTicker}</span>
+             <span className="text-xs font-bold px-4">{settings.services.newsTicker}</span>
+          </div>
+        </div>
+      )}
+
+      <main className={`container mx-auto px-4 ${settings.services.showNews ? 'pt-32' : 'pt-24'} space-y-8 md:space-y-12`}>
         {activeTab === 'home' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {user && (
@@ -122,29 +170,54 @@ const App: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold">أهلاً بك، {user.name}</h3>
-                  <p className="text-xs text-gray-400">طاب يومك في سوريا الجديدة</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-emerald-400 font-mono">رقم الحساب: #{user.accountNumber}</p>
+                    <div className="w-1 h-1 rounded-full bg-gray-600" />
+                    <p className="text-xs text-gray-400">طاب يومك في سوريا الجديدة</p>
+                  </div>
                 </div>
               </div>
             )}
-            <Hero onStart={() => setActiveTab('calc')} />
+            <Hero 
+              onStart={() => setActiveTab('calc')} 
+              onHowItWorks={() => setShowHowItWorks(true)}
+            />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-8">
               <MarketPulse settings={settings} formatNumber={formatNumber} />
               <div className="glass p-8 rounded-2xl flex flex-col items-center justify-center text-center space-y-4">
-                <ShieldCheck size={48} className="text-emerald-500" />
+                <ShieldCheck size={48} className="text-emerald-400" />
                 <h3 className="font-black text-xl">نظام محمي 2026</h3>
                 <p className="text-sm text-gray-400">جميع العمليات تخضع لأعلى معايير التشفير المالي لضمان سلامة مدخراتكم.</p>
               </div>
             </div>
-            <div className="mt-8">
-              <QuickConverter settings={settings} formatNumber={formatNumber} />
-            </div>
+            {settings.services.showConverter && (
+              <div className="mt-8">
+                <QuickConverter settings={settings} formatNumber={formatNumber} />
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'calc' && <div className="animate-in fade-in slide-in-from-left-4 duration-500"><ValuationCalculator settings={settings} formatNumber={formatNumber} user={user} /></div>}
         {activeTab === 'conv' && <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-right-4 duration-500"><QuickConverter settings={settings} formatNumber={formatNumber} /></div>}
-        {activeTab === 'gallery' && <div className="animate-in fade-in zoom-in-95 duration-500"><BanknoteGallery /></div>}
+        {activeTab === 'gallery' && (
+          settings.services.showGallery ? (
+            <div className="animate-in fade-in zoom-in-95 duration-500"><BanknoteGallery banknotes={banknotes} /></div>
+          ) : (
+            <div className="text-center py-20">عذراً، هذه الخدمة غير متوفرة حالياً.</div>
+          )
+        )}
       </main>
+
+      <a 
+        href={settings.services.supportLink} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="fixed bottom-24 right-4 md:bottom-10 md:right-10 z-40 p-4 bg-emerald-500 text-white rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center gap-2"
+      >
+        <Headset size={24} />
+        <span className="hidden md:block font-bold">الدعم المالي</span>
+      </a>
 
       <div className="fixed bottom-0 left-0 right-0 glass border-t border-white/10 md:hidden z-[100] px-2 py-3">
         <div className="flex justify-around items-center">
@@ -170,8 +243,19 @@ const App: React.FC = () => {
         </button>
       </div>
 
+      <style>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(100%); }
+        }
+        .animate-marquee {
+          animation: marquee 30s linear infinite;
+        }
+      `}</style>
+
       {showPinPad && <PinPad onClose={() => setShowPinPad(false)} onSubmit={handleAdminAuth} />}
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onLogin={setUser} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onLogin={handleRegisterUser} />}
+      {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
     </div>
   );
 };

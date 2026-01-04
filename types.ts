@@ -21,6 +21,14 @@ export interface VisualIdentity {
   themeMode: 'dark' | 'glass';
 }
 
+export interface AppServices {
+  supportLink: string;
+  newsTicker: string;
+  showConverter: boolean;
+  showGallery: boolean;
+  showNews: boolean;
+}
+
 export interface AppSettings {
   siteName: string;
   logoUrl: string;
@@ -29,6 +37,7 @@ export interface AppSettings {
   aboutText: string;
   maintenance: MaintenanceConfig;
   visual: VisualIdentity;
+  services: AppServices;
   conversionFactor: number;
 }
 
@@ -36,6 +45,7 @@ export interface User {
   name: string;
   pin: string;
   photoUrl: string;
+  accountNumber: string; // 4-digit account number
 }
 
 export type NumberMode = 'arabic' | 'latin';

@@ -40,31 +40,43 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
   }, [users, userSearch]);
 
   const uploadToSupabase = async (file: File, path: string): Promise<string | null> => {
-    const fileName = `${Date.now()}_${file.name}`;
-    const { data, error } = await supabase.storage
-      .from('assets')
-      .upload(`${path}/${fileName}`, file);
+    try {
+      const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+      const { data, error } = await supabase.storage
+        .from('assets')
+        .upload(`${path}/${fileName}`, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-    if (error) {
-      console.error('Upload Error:', error);
+      if (error) {
+        console.error('Storage Upload Error:', error);
+        throw error;
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(data.path);
+      return publicUrl;
+    } catch (err: any) {
+      alert(`فشل رفع الصورة: ${err.message || 'خطأ غير معروف في التخزين'}`);
       return null;
     }
-
-    const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(data.path);
-    return publicUrl;
   };
 
   const handleInstantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, path: string, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Local preview
+      // إظهار معاينة محلية فورية للمستخدم
       const previewUrl = URL.createObjectURL(file);
       callback(previewUrl);
 
-      // S3/Supabase upload
+      // البدء بالرفع الفعلي للسحابة
       const uploadedUrl = await uploadToSupabase(file, path);
       if (uploadedUrl) {
         callback(uploadedUrl);
+      } else {
+        // إذا فشل الرفع، نرجع القيمة لما كانت عليه (يفضل أن تكون فارغة أو القيمة السابقة)
+        // لتجنب حفظ رابط blob: في قاعدة البيانات
+        console.warn('Upload failed, state might contain local blob URL.');
       }
     }
   };
@@ -72,7 +84,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
   const handleGlobalSave = async () => {
     setIsSaving(true);
     try {
-      // Save Main Settings
+      // 1. حفظ الإعدادات الأساسية (Singleton Row ID: 1)
       const { error: settingsError } = await supabase
         .from('app_settings')
         .upsert({
@@ -99,44 +111,58 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
 
       if (settingsError) throw settingsError;
 
-      // Save Banknotes
-      for (const note of banknotes) {
-        await supabase.from('banknotes').upsert({
-          id: note.id,
-          value: note.value,
-          name: note.name,
-          front_image: note.frontImage,
-          back_image: note.backImage,
-          security_features: note.securityFeatures,
-          purchasing_power: note.purchasingPower
-        });
-      }
+      // 2. حفظ جميع الفئات النقدية دفعة واحدة (Batch Upsert)
+      const banknotesToUpsert = banknotes.map(note => ({
+        id: note.id,
+        value: note.value,
+        name: note.name,
+        front_image: note.frontImage,
+        back_image: note.backImage,
+        security_features: note.securityFeatures,
+        purchasing_power: note.purchasingPower
+      }));
+
+      const { error: notesError } = await supabase
+        .from('banknotes')
+        .upsert(banknotesToUpsert);
+
+      if (notesError) throw notesError;
 
       alert('تم حفظ جميع البيانات بنجاح في السحابة!');
-    } catch (err) {
-      console.error('Save Error:', err);
-      alert('حدث خطأ أثناء الحفظ. يرجى المحاولة لاحقاً.');
+    } catch (err: any) {
+      console.error('Save Operation Failed:', err);
+      // استخراج تفاصيل الخطأ بدلاً من إظهار [object Object]
+      const errorMsg = err.message || err.details || JSON.stringify(err);
+      alert(`حدث خطأ أثناء الحفظ:\n${errorMsg}\n\nيرجى التأكد من اتصال الإنترنت وصلاحيات قاعدة البيانات.`);
     } finally {
       setIsSaving(false);
     }
   };
 
   const addFloatingImage = async (url: string) => {
-    const newImg = {
-        id: Math.random().toString(36).substring(7),
-        url: url,
-        top_pos: 10 + Math.floor(Math.random() * 60),
-        left_pos: 10 + Math.floor(Math.random() * 60),
-        size_px: 60 + Math.floor(Math.random() * 120),
-        duration: 6 + Math.floor(Math.random() * 10)
-    };
-    
-    await supabase.from('floating_images').insert(newImg);
-    // Realtime will update the App state
+    try {
+      const newImg = {
+          url: url,
+          top_pos: 10 + Math.floor(Math.random() * 60),
+          left_pos: 10 + Math.floor(Math.random() * 60),
+          size_px: 60 + Math.floor(Math.random() * 120),
+          duration: 6 + Math.floor(Math.random() * 10)
+      };
+      
+      const { error } = await supabase.from('floating_images').insert(newImg);
+      if (error) throw error;
+    } catch (err: any) {
+      alert(`خطأ في إضافة الرمز العائم: ${err.message}`);
+    }
   };
 
   const removeFloatingImage = async (id: string) => {
-    await supabase.from('floating_images').delete().eq('id', id);
+    try {
+      const { error } = await supabase.from('floating_images').delete().eq('id', id);
+      if (error) throw error;
+    } catch (err: any) {
+      alert(`خطأ في حذف الرمز: ${err.message}`);
+    }
   };
 
   const navItems = [

@@ -53,10 +53,7 @@ const Hero: React.FC<{ onStart: () => void }> = ({ onStart }) => {
               className="rounded-[1.5rem] w-full h-[250px] md:h-[350px] object-cover opacity-60 grayscale hover:grayscale-0 transition-all duration-700"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent rounded-[1.5rem]" />
-            <div className="absolute bottom-6 right-6 p-4 glass rounded-xl border-emerald-500/20 shadow-2xl">
-              <div className="text-[10px] text-gray-400 mb-1 font-bold">السعر الرسمي المركزي</div>
-              <div className="text-xl md:text-2xl font-black text-white">1$ = 50 <span className="text-xs text-emerald-400">ل.س</span></div>
-            </div>
+            {/* Exchange rate box removed as requested */}
           </div>
         </div>
       </div>

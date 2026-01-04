@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Calculator, Coins, Grid, ShieldCheck, Lock, User as UserIcon, Home, Clock, LogOut, Megaphone, Headset } from 'lucide-react';
+import { Layout, Calculator, Coins, Grid, ShieldCheck, Lock, User as UserIcon, Home, Clock, LogOut, Megaphone, Headset, Loader2 } from 'lucide-react';
 import Header from './components/Layout/Header';
 import Hero from './components/Home/Hero';
 import ValuationCalculator from './components/Calculator/ValuationCalculator';
@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const [showPinPad, setShowPinPad] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('syr_user_v5');
@@ -27,23 +28,21 @@ const App: React.FC = () => {
   });
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
-
   const [activeTab, setActiveTab] = useState<'home' | 'calc' | 'conv' | 'gallery'>('home');
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   const [banknotes, setBanknotes] = useState<Banknote[]>(INITIAL_BANKNOTES);
   const [numberMode, setNumberMode] = useState<NumberMode>('latin');
 
-  // Load Initial Data from Supabase
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = async () => {
+    try {
       // 1. Fetch App Settings
-      const { data: settingsData, error: settingsError } = await supabase
+      const { data: settingsData } = await supabase
         .from('app_settings')
         .select('*')
         .eq('id', 1)
         .single();
       
-      if (settingsData && !settingsError) {
+      if (settingsData) {
         setSettings({
           siteName: settingsData.site_name,
           logoUrl: settingsData.logo_url,
@@ -60,7 +59,7 @@ const App: React.FC = () => {
             primaryColor: settingsData.visual_primary_color,
             themeMode: settingsData.visual_theme_mode,
             globalBackgroundImage: settingsData.visual_global_background_image,
-            floatingImages: [] // Will fetch separately
+            floatingImages: [] 
           },
           services: {
             supportLink: settingsData.services_support_link,
@@ -114,24 +113,26 @@ const App: React.FC = () => {
           accountNumber: p.account_number
         })));
       }
-    };
+    } catch (err) {
+      console.error("Initial Load Error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
 
-    // Set up Realtime Subscriptions
-    const settingsSub = supabase
-      .channel('public:app_settings')
+    // استماع للتحديثات الفورية من Supabase
+    const channel = supabase
+      .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, fetchData)
-      .subscribe();
-
-    const floatSub = supabase
-      .channel('public:floating_images')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'floating_images' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'banknotes' }, fetchData)
       .subscribe();
 
     return () => {
-      supabase.removeChannel(settingsSub);
-      supabase.removeChannel(floatSub);
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -162,20 +163,33 @@ const App: React.FC = () => {
 
   const handleRegisterUser = async (newUser: User) => {
     setUser(newUser);
-    // Sync with Supabase
-    await supabase.from('profiles').upsert({
-      id: (await supabase.auth.getUser()).data.user?.id || crypto.randomUUID(), // Fallback if not using Auth
-      full_name: newUser.name,
-      account_number: newUser.accountNumber,
-      photo_url: newUser.photoUrl,
-      pin_code: newUser.pin
-    });
-    setAllUsers(prev => [...prev, newUser]);
+    try {
+      await supabase.from('profiles').upsert({
+        id: crypto.randomUUID(), // في تطبيق حقيقي يتم استخدام auth.uid()
+        full_name: newUser.name,
+        account_number: newUser.accountNumber,
+        photo_url: newUser.photoUrl,
+        pin_code: newUser.pin
+      });
+      fetchData(); // تحديث قائمة المستخدمين
+    } catch (err) {
+      console.error("Profile Sync Error:", err);
+    }
   };
 
+  // Define handleLogoutUser to clear the user state and session
   const handleLogoutUser = () => {
     setUser(null);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="w-12 h-12 text-emerald-500 animate-spin" />
+        <p className="text-emerald-500 font-black text-sm uppercase tracking-widest animate-pulse">جاري تحميل النظام المالي 2026...</p>
+      </div>
+    );
+  }
 
   if (settings.maintenance.isPaused && !isAdmin) {
     return (
@@ -231,7 +245,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen relative pb-24 md:pb-12 overflow-x-hidden">
-      {/* Background Layers */}
       <div className="animated-bg" />
       {settings.visual.globalBackgroundImage && (
         <div 
@@ -240,13 +253,12 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Floating Images Layer */}
       <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
           {settings.visual.floatingImages.map((img) => (
               <img 
                 key={img.id}
                 src={img.url}
-                className="absolute floating"
+                className="absolute floating-element"
                 style={{
                     top: `${img.top}%`,
                     left: `${img.left}%`,

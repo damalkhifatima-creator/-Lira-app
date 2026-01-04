@@ -5,7 +5,7 @@ import {
   Save, Clock, Upload, X, Menu, Laptop, Tablet, Smartphone,
   Circle, Square, RectangleHorizontal, Grid, Edit3, Users, Search,
   User as UserIcon, Shield, Headset, Megaphone, ToggleLeft, ToggleRight,
-  Coins, Trash2, Plus, Info, ImagePlus
+  Coins, Trash2, Plus, Info, ImagePlus, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { AppSettings, Banknote, User, FloatingImage } from '../../types';
 import { supabase } from '../../supabase';
@@ -25,12 +25,11 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   
   const logoInputRef = useRef<HTMLInputElement>(null);
   const globalBgInputRef = useRef<HTMLInputElement>(null);
   const floatingInputRef = useRef<HTMLInputElement>(null);
-  const frontInputRef = useRef<HTMLInputElement>(null);
-  const backInputRef = useRef<HTMLInputElement>(null);
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => 
@@ -44,20 +43,13 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
       const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
       const { data, error } = await supabase.storage
         .from('assets')
-        .upload(`${path}/${fileName}`, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
+        .upload(`${path}/${fileName}`, file, { cacheControl: '3600', upsert: false });
 
-      if (error) {
-        console.error('Storage Upload Error:', error);
-        throw error;
-      }
-
+      if (error) throw error;
       const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(data.path);
       return publicUrl;
     } catch (err: any) {
-      alert(`فشل رفع الصورة: ${err.message || 'خطأ غير معروف في التخزين'}`);
+      alert(`خطأ في رفع الملف: ${err.message || JSON.stringify(err)}`);
       return null;
     }
   };
@@ -65,26 +57,18 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
   const handleInstantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, path: string, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
-      // إظهار معاينة محلية فورية للمستخدم
       const previewUrl = URL.createObjectURL(file);
       callback(previewUrl);
-
-      // البدء بالرفع الفعلي للسحابة
       const uploadedUrl = await uploadToSupabase(file, path);
-      if (uploadedUrl) {
-        callback(uploadedUrl);
-      } else {
-        // إذا فشل الرفع، نرجع القيمة لما كانت عليه (يفضل أن تكون فارغة أو القيمة السابقة)
-        // لتجنب حفظ رابط blob: في قاعدة البيانات
-        console.warn('Upload failed, state might contain local blob URL.');
-      }
+      if (uploadedUrl) callback(uploadedUrl);
     }
   };
 
   const handleGlobalSave = async () => {
     setIsSaving(true);
+    setSaveStatus('idle');
     try {
-      // 1. حفظ الإعدادات الأساسية (Singleton Row ID: 1)
+      // 1. مزامنة إعدادات التطبيق الأساسية
       const { error: settingsError } = await supabase
         .from('app_settings')
         .upsert({
@@ -111,29 +95,30 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
 
       if (settingsError) throw settingsError;
 
-      // 2. حفظ جميع الفئات النقدية دفعة واحدة (Batch Upsert)
-      const banknotesToUpsert = banknotes.map(note => ({
-        id: note.id,
-        value: note.value,
-        name: note.name,
-        front_image: note.frontImage,
-        back_image: note.backImage,
-        security_features: note.securityFeatures,
-        purchasing_power: note.purchasingPower
+      // 2. مزامنة فئات العملة (Batch Upsert)
+      const banknotesToSave = banknotes.map(n => ({
+        id: n.id,
+        value: n.value,
+        name: n.name,
+        front_image: n.frontImage,
+        back_image: n.backImage,
+        security_features: n.securityFeatures,
+        purchasing_power: n.purchasingPower
       }));
 
       const { error: notesError } = await supabase
         .from('banknotes')
-        .upsert(banknotesToUpsert);
+        .upsert(banknotesToSave);
 
       if (notesError) throw notesError;
 
-      alert('تم حفظ جميع البيانات بنجاح في السحابة!');
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err: any) {
-      console.error('Save Operation Failed:', err);
-      // استخراج تفاصيل الخطأ بدلاً من إظهار [object Object]
-      const errorMsg = err.message || err.details || JSON.stringify(err);
-      alert(`حدث خطأ أثناء الحفظ:\n${errorMsg}\n\nيرجى التأكد من اتصال الإنترنت وصلاحيات قاعدة البيانات.`);
+      console.error('Save Operation Failure:', err);
+      setSaveStatus('error');
+      const errorMessage = err?.message || err?.details || JSON.stringify(err);
+      alert(`فشل المزامنة السحابية:\n${errorMessage}`);
     } finally {
       setIsSaving(false);
     }
@@ -141,94 +126,59 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
 
   const addFloatingImage = async (url: string) => {
     try {
-      const newImg = {
-          url: url,
-          top_pos: 10 + Math.floor(Math.random() * 60),
-          left_pos: 10 + Math.floor(Math.random() * 60),
-          size_px: 60 + Math.floor(Math.random() * 120),
-          duration: 6 + Math.floor(Math.random() * 10)
-      };
-      
-      const { error } = await supabase.from('floating_images').insert(newImg);
+      const { error } = await supabase.from('floating_images').insert({
+        url: url,
+        top_pos: Math.random() * 80 + 10,
+        left_pos: Math.random() * 80 + 10,
+        size_px: Math.random() * 60 + 40,
+        duration: Math.random() * 10 + 5
+      });
       if (error) throw error;
-    } catch (err: any) {
-      alert(`خطأ في إضافة الرمز العائم: ${err.message}`);
-    }
+    } catch (err: any) { alert(`خطأ: ${err.message}`); }
   };
 
   const removeFloatingImage = async (id: string) => {
     try {
       const { error } = await supabase.from('floating_images').delete().eq('id', id);
       if (error) throw error;
-    } catch (err: any) {
-      alert(`خطأ في حذف الرمز: ${err.message}`);
-    }
-  };
-
-  const navItems = [
-    { id: 'system', label: 'إعدادات المنصة', icon: Settings },
-    { id: 'banknotes', label: 'تحديث الصور', icon: ImagePlus },
-    { id: 'users', label: 'إدارة المستخدمين', icon: Users },
-    { id: 'services', label: 'الخدمات الذكية', icon: Megaphone },
-    { id: 'maintenance', label: 'وضع الصيانة', icon: Clock },
-  ];
-
-  const getLogoShapePreview = () => {
-    switch (settings.logoShape) {
-      case 'circle': return 'rounded-full';
-      case 'square': return 'rounded-2xl';
-      case 'rectangle': return 'rounded-xl';
-      default: return 'rounded-2xl';
-    }
+    } catch (err: any) { alert(`خطأ: ${err.message}`); }
   };
 
   const toggleService = (key: keyof typeof settings.services) => {
-    if (typeof settings.services[key] === 'boolean') {
-      setSettings({
-        ...settings,
-        services: {
-          ...settings.services,
-          [key]: !settings.services[key]
-        }
-      });
-    }
+    setSettings({
+      ...settings,
+      services: { ...settings.services, [key]: !settings.services[key] }
+    });
   };
 
   return (
     <div className="min-h-screen bg-[#020617] flex flex-col md:flex-row font-cairo text-white overflow-hidden relative">
-      <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-emerald-500/5 blur-[120px] rounded-full z-0 pointer-events-none" />
+      <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-emerald-500/5 blur-[150px] rounded-full z-0 pointer-events-none" />
       
-      <div className="md:hidden p-4 glass flex justify-between items-center z-[100] sticky top-0 backdrop-blur-2xl">
-        <div className="flex items-center gap-2">
-           <LayoutDashboard size={20} className="text-emerald-400" />
-           <h1 className="font-black text-sm">لوحة التحكم</h1>
-        </div>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-          {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-      </div>
-
       <aside className={`
-        fixed inset-y-0 right-0 w-72 md:w-64 lg:w-80 border-l border-white/5 p-6 flex flex-col glass z-[90] transition-transform duration-300 backdrop-blur-3xl
+        fixed inset-y-0 right-0 w-72 md:w-64 border-l border-white/5 p-6 flex flex-col glass z-[90] transition-transform duration-300
         ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0 md:static'}
       `}>
-        <div className="hidden md:flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 emerald-gradient rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+        <div className="flex items-center gap-3 mb-12">
+          <div className="w-10 h-10 emerald-gradient rounded-xl flex items-center justify-center shadow-lg">
             <LayoutDashboard className="text-white w-6 h-6" />
           </div>
-          <h1 className="text-xl font-black">مركز الإدارة</h1>
+          <h1 className="text-xl font-black tracking-tight">إدارة النظام</h1>
         </div>
 
-        <nav className="flex-1 space-y-1">
-          {navItems.map((item) => (
+        <nav className="flex-1 space-y-2">
+          {[
+            { id: 'system', label: 'الإعدادات العامة', icon: Settings },
+            { id: 'banknotes', label: 'تحديث العملات', icon: ImagePlus },
+            { id: 'users', label: 'المواطنين', icon: Users },
+            { id: 'services', label: 'الخدمات', icon: Megaphone },
+            { id: 'maintenance', label: 'الصيانة', icon: Clock },
+          ].map((item) => (
             <button
               key={item.id}
-              onClick={() => {
-                setActiveTab(item.id as any);
-                setIsMobileMenuOpen(false);
-              }}
+              onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold transition-all ${
-                activeTab === item.id ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-gray-400 hover:bg-white/5'
+                activeTab === item.id ? 'bg-emerald-500 text-white shadow-xl shadow-emerald-500/20' : 'text-gray-400 hover:bg-white/5'
               }`}
             >
               <item.icon size={20} />
@@ -238,517 +188,270 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
         </nav>
 
         <button onClick={onLogout} className="mt-8 flex items-center gap-4 px-5 py-4 rounded-2xl font-bold text-red-400 hover:bg-red-500/10 transition-all">
-          <LogOut size={20} /> <span className="text-sm">خروج من الإدارة</span>
+          <LogOut size={20} /> <span className="text-sm">خروج آمن</span>
         </button>
       </aside>
 
-      <main className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto h-screen relative z-10">
-        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-4">
+      <main className="flex-1 p-6 md:p-10 lg:p-14 overflow-y-auto h-screen relative z-10">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
           <div className="space-y-1">
-            <h2 className="text-2xl lg:text-3xl font-black">إعدادات المنصة 2026</h2>
-            <div className="flex gap-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                <span className="flex items-center gap-1"><Laptop size={10} /> نظام الحاسوب</span>
-                <span className="flex items-center gap-1"><Smartphone size={10} /> الهواتف الذكية</span>
-            </div>
+            <h2 className="text-3xl font-black">لوحة التحكم السحابية 2026</h2>
+            <p className="text-gray-500 text-sm">أهلاً بك في نظام الإدارة المركزي الفائق.</p>
           </div>
           <button 
             onClick={handleGlobalSave}
             disabled={isSaving}
-            className="w-full sm:w-auto px-10 py-4 bg-emerald-500 text-white rounded-2xl font-black shadow-2xl shadow-emerald-500/20 flex items-center justify-center gap-3 hover:bg-emerald-600 transition-all active:scale-95 group disabled:opacity-50"
+            className={`
+              w-full md:w-auto px-10 py-4 rounded-2xl font-black flex items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl
+              ${saveStatus === 'success' ? 'bg-emerald-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-emerald-500 hover:bg-emerald-400'}
+            `}
           >
-              <Save size={18} className={`${isSaving ? 'animate-spin' : 'group-hover:rotate-12 transition-transform'}`} /> 
-              {isSaving ? 'جاري الحفظ...' : 'حفظ الإعدادات النهائية'}
+            {isSaving ? <Clock className="animate-spin" size={18} /> : saveStatus === 'success' ? <CheckCircle2 size={18} /> : saveStatus === 'error' ? <AlertCircle size={18} /> : <Save size={18} />}
+            {isSaving ? 'جاري المزامنة...' : saveStatus === 'success' ? 'تم الحفظ بنجاح' : saveStatus === 'error' ? 'فشل الحفظ' : 'حفظ التغييرات'}
           </button>
         </header>
 
-        <div className="max-w-5xl mx-auto grid grid-cols-1 gap-8 pb-32">
+        <div className="max-w-6xl mx-auto space-y-8 pb-32">
           {activeTab === 'system' && (
             <div className="space-y-8 animate-in fade-in duration-500">
-              <div className="glass p-6 md:p-10 rounded-[2.5rem] border border-white/5 shadow-2xl">
-                <h3 className="text-xl font-black mb-8 border-b border-white/5 pb-6 flex items-center gap-3">
-                   <Settings className="text-emerald-400" size={20} />
-                   معلومات المنصة الأساسية
+              <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 shadow-2xl space-y-10">
+                <h3 className="text-xl font-black flex items-center gap-3 border-b border-white/5 pb-6">
+                  <Settings className="text-emerald-400" size={24} /> الأساسيات
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-3">
-                    <label className="text-xs font-bold text-gray-400 px-1">اسم الموقع الرسمي</label>
+                    <label className="text-xs font-bold text-gray-400 px-1 uppercase tracking-widest">اسم المنصة الرسمي</label>
                     <input 
-                      type="text" 
-                      value={settings.siteName} 
+                      type="text" value={settings.siteName} 
                       onChange={(e) => setSettings({ ...settings, siteName: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 transition-all font-bold" 
+                      className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 transition-all font-bold text-lg" 
                     />
                   </div>
                   <div className="space-y-3">
-                    <label className="text-xs font-bold text-gray-400 px-1">معامل التحويل المركزي</label>
+                    <label className="text-xs font-bold text-gray-400 px-1 uppercase tracking-widest">معامل التحويل</label>
                     <div className="relative">
-                        <input 
-                        type="number" 
-                        value={settings.conversionFactor} 
+                      <input 
+                        type="number" value={settings.conversionFactor} 
                         onChange={(e) => setSettings({ ...settings, conversionFactor: Number(e.target.value) })}
-                        className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 transition-all font-mono font-bold text-emerald-400" 
-                        />
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] text-gray-500 font-bold">1:N</div>
+                        className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 transition-all font-mono font-black text-2xl text-emerald-400" 
+                      />
+                      <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 text-xs font-bold">1:N</div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="glass p-6 md:p-10 rounded-[2.5rem] border border-white/5 space-y-10 shadow-2xl">
-                 <div className="flex justify-between items-center border-b border-white/5 pb-6">
-                    <h3 className="text-xl font-black flex items-center gap-3">
-                        <ImageIcon size={22} className="text-emerald-400" />
-                        الهوية البصرية والرموز العائمة
-                    </h3>
-                    <div className="px-4 py-1.5 bg-emerald-500/10 rounded-full text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-500/20">
-                        Visual Engine 2026
-                    </div>
-                 </div>
-
-                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                    <div className="space-y-6">
-                       <div className="flex items-center justify-between">
-                          <label className="text-sm font-black text-gray-300">الصورة الخلفية للمنصة</label>
-                          <span className="text-[10px] text-gray-500 font-bold uppercase">Background Layer</span>
-                       </div>
-                       <div 
-                         className="aspect-video glass rounded-[2rem] border-2 border-dashed border-white/10 overflow-hidden relative group cursor-pointer transition-all hover:border-emerald-500/40"
-                         onClick={() => globalBgInputRef.current?.click()}
-                       >
-                          {settings.visual.globalBackgroundImage ? (
-                              <img src={settings.visual.globalBackgroundImage} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700" />
-                          ) : (
-                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 space-y-3">
-                                 <Upload size={32} className="opacity-20" />
-                                 <span className="text-sm font-bold italic">انقر لرفع خلفية الموقع</span>
-                              </div>
-                          )}
-                          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity space-y-2">
-                             <Upload className="text-white" size={32} />
-                             <span className="text-xs font-bold text-white uppercase tracking-widest">تحديث الخلفية فوراً</span>
-                          </div>
-                          <input type="file" ref={globalBgInputRef} className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, 'backgrounds', (url) => setSettings({...settings, visual: {...settings.visual, globalBackgroundImage: url}}))} />
-                       </div>
-                       {settings.visual.globalBackgroundImage && (
-                           <button onClick={(e) => { e.stopPropagation(); setSettings({...settings, visual: {...settings.visual, globalBackgroundImage: ''}})}} className="flex items-center gap-2 text-xs text-red-400 font-black hover:text-red-300 transition-colors bg-red-500/10 px-4 py-2 rounded-xl border border-red-500/20">
-                              <Trash2 size={14} /> حذف الخلفية الحالية
-                           </button>
-                       )}
-                    </div>
-
-                    <div className="space-y-6">
-                       <div className="flex justify-between items-center">
-                          <div className="space-y-1">
-                             <label className="text-sm font-black text-gray-300">الرموز والعملات العائمة</label>
-                             <p className="text-[10px] text-gray-500 font-bold">تتحرك تلقائياً في الخلفية</p>
-                          </div>
-                          <button 
-                            onClick={() => floatingInputRef.current?.click()}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 rounded-xl text-white font-black text-xs hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
-                          >
-                             <Plus size={14} /> إضافة رمز
-                          </button>
-                          <input type="file" ref={floatingInputRef} className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, 'floating', (url) => addFloatingImage(url))} />
-                       </div>
-                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-[250px] overflow-y-auto pr-2 custom-scroll">
-                          {settings.visual.floatingImages.map((img) => (
-                             <div key={img.id} className="aspect-square glass rounded-2xl overflow-hidden relative group border border-white/5 hover:border-emerald-500/30 transition-all p-2">
-                                <img src={img.url} className="w-full h-full object-contain drop-shadow-lg" />
-                                <button 
-                                  onClick={() => removeFloatingImage(img.id)}
-                                  className="absolute top-1 right-1 p-1.5 bg-red-500 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                                >
-                                   <X size={12} />
-                                </button>
-                             </div>
-                          ))}
-                          {settings.visual.floatingImages.length === 0 && (
-                              <div className="col-span-full py-12 text-center text-[10px] text-gray-600 font-black italic border border-white/5 rounded-[2rem] bg-white/5 border-dashed">
-                                 لم يتم إضافة أي رموز عائمة بعد.
-                              </div>
-                          )}
-                       </div>
-                    </div>
-                 </div>
-              </div>
-
-              <div className="glass p-6 md:p-10 rounded-[2.5rem] border border-white/5 shadow-2xl">
-                <h3 className="text-xl font-black mb-8 border-b border-white/5 pb-6 flex items-center gap-3">
-                   <Upload size={22} className="text-emerald-400" />
-                   هوية الشعار المركزي
+              <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 shadow-2xl space-y-10">
+                <h3 className="text-xl font-black flex items-center gap-3 border-b border-white/5 pb-6">
+                  <ImageIcon className="text-emerald-400" size={24} /> الهوية والرموز
                 </h3>
-                
-                <div className="flex flex-col lg:flex-row gap-12">
-                   <div className={`w-40 h-40 md:w-56 md:h-56 glass flex items-center justify-center border-2 border-dashed border-white/10 shrink-0 transition-all overflow-hidden p-6 ${getLogoShapePreview()}`}>
-                      {settings.logoUrl ? (
-                        <img src={settings.logoUrl} className="max-w-full max-h-full object-contain drop-shadow-2xl" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                  <div className="space-y-6">
+                    <label className="text-sm font-black text-gray-300">خلفية المنصة الرئيسية</label>
+                    <div 
+                      onClick={() => globalBgInputRef.current?.click()}
+                      className="aspect-video glass rounded-[2rem] border-2 border-dashed border-white/10 overflow-hidden relative cursor-pointer group hover:border-emerald-500/40 transition-all"
+                    >
+                      {settings.visual.globalBackgroundImage ? (
+                        <img src={settings.visual.globalBackgroundImage} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700" />
                       ) : (
-                        <div className="text-center space-y-2 opacity-20">
-                           <ImageIcon className="mx-auto" size={48} />
-                           <p className="text-[10px] font-black uppercase">No Logo</p>
+                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 gap-3">
+                          <Upload size={32} className="opacity-20" />
+                          <span className="text-sm font-bold opacity-30">انقر للرفع</span>
                         </div>
                       )}
-                   </div>
-                   
-                   <div className="flex-1 space-y-10">
-                      <div className="space-y-4">
-                        <label className="text-xs font-bold text-gray-400 px-1 uppercase tracking-widest">تنسيق الشكل</label>
-                        <div className="flex flex-wrap gap-4">
-                            {[
-                                { id: 'circle', label: 'دائري', icon: Circle },
-                                { id: 'square', label: 'مربع', icon: Square },
-                                { id: 'rectangle', label: 'مستطيل', icon: RectangleHorizontal }
-                            ].map((shape) => (
-                                <button
-                                    key={shape.id}
-                                    onClick={() => setSettings({ ...settings, logoShape: shape.id as any })}
-                                    className={`flex items-center gap-3 px-6 py-3 rounded-2xl border transition-all ${settings.logoShape === shape.id ? 'bg-emerald-500 text-white border-emerald-500 shadow-xl shadow-emerald-500/20' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
-                                >
-                                    <shape.icon size={18} />
-                                    <span className="text-sm font-black">{shape.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                      </div>
+                      <input type="file" ref={globalBgInputRef} className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, 'backgrounds', (url) => setSettings({...settings, visual: {...settings.visual, globalBackgroundImage: url}}))} />
+                    </div>
+                  </div>
 
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <label className="text-xs font-bold text-gray-400 px-1 uppercase tracking-widest">مقياس الحجم</label>
-                            <span className="text-sm font-mono text-emerald-400 font-black">{settings.logoSize}px</span>
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <label className="text-sm font-black text-gray-300">الرموز العائمة</label>
+                      <button 
+                        onClick={() => floatingInputRef.current?.click()}
+                        className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500 transition-colors hover:text-white"
+                      >
+                        <Plus size={18} />
+                      </button>
+                      <input type="file" ref={floatingInputRef} className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, 'floating', (url) => addFloatingImage(url))} />
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-[250px] overflow-y-auto pr-2 custom-scroll">
+                      {settings.visual.floatingImages.map((img) => (
+                        <div key={img.id} className="aspect-square glass rounded-2xl p-2 relative group border border-white/5 hover:border-emerald-500/30 transition-all">
+                          <img src={img.url} className="w-full h-full object-contain" />
+                          <button onClick={() => removeFloatingImage(img.id)} className="absolute -top-2 -right-2 p-1.5 bg-red-500 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                            <X size={12} />
+                          </button>
                         </div>
-                        <input 
-                            type="range" 
-                            min="30" 
-                            max="120" 
-                            value={settings.logoSize}
-                            onChange={(e) => setSettings({ ...settings, logoSize: Number(e.target.value) })}
-                            className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-emerald-500"
-                        />
-                      </div>
-
-                      <div className="flex flex-wrap gap-3 pt-2">
-                        <input type="file" ref={logoInputRef} onChange={(e) => handleInstantImageUpload(e, 'logos', (url) => setSettings({ ...settings, logoUrl: url }))} className="hidden" accept="image/*" />
-                        <button 
-                            onClick={() => logoInputRef.current?.click()}
-                            className="flex-1 sm:flex-none px-10 py-4 bg-white/5 hover:bg-emerald-500/10 border border-white/10 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3"
-                        >
-                            <Upload size={18} /> رفع شعار جديد
-                        </button>
-                        {settings.logoUrl && (
-                            <button 
-                                onClick={() => setSettings({...settings, logoUrl: ''})}
-                                className="flex-1 sm:flex-none px-10 py-4 text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3"
-                            >
-                                <Trash2 size={18} /> حذف الشعار
-                            </button>
-                        )}
-                      </div>
-                   </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {activeTab === 'banknotes' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
-               <div className="glass p-8 rounded-[2rem] border border-white/5 mb-6 flex items-start gap-4">
-                  <div className="p-3 bg-amber-500/10 rounded-2xl">
-                     <Info className="text-amber-500" size={24} />
-                  </div>
-                  <div className="space-y-1">
-                     <h4 className="font-black text-lg">ملاحظة أمنية للمدير</h4>
-                     <p className="text-sm text-gray-400 leading-relaxed">
-                        بناءً على بروتوكول 2026، لا يمكن تعديل "اسم العملة" أو "قيمتها" يدوياً. يمكنك فقط تحديث "الصور" و "ميزات الأمان" لضمان ثبات النظام المالي.
-                     </p>
-                  </div>
-               </div>
-
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {banknotes.map((note) => (
-                   <div key={note.id} className="glass p-8 rounded-[2.5rem] border border-white/5 flex flex-col gap-6 group hover:border-emerald-500/30 transition-all shadow-xl">
-                      <div className="flex items-center justify-between">
-                         <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 emerald-gradient rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-xl shadow-emerald-500/20">{note.value}</div>
-                            <div>
-                               <h4 className="font-black text-lg">{note.name}</h4>
-                               <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Currency Asset Locked</p>
-                            </div>
-                         </div>
-                         <button 
-                            onClick={() => setEditingNoteId(editingNoteId === note.id ? null : note.id)}
-                            className={`p-3 rounded-xl transition-all ${editingNoteId === note.id ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10'}`}
-                         >
-                            <Edit3 size={20} />
-                         </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-500">
+              {banknotes.map((note) => (
+                <div key={note.id} className="glass p-8 rounded-[2.5rem] border border-white/5 space-y-6 group hover:border-emerald-500/30 transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-5">
+                      <div className="w-14 h-14 emerald-gradient rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-xl">{note.value}</div>
+                      <div>
+                        <h4 className="font-black text-lg">{note.name}</h4>
+                        <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Active Asset</span>
                       </div>
+                    </div>
+                    <button 
+                      onClick={() => setEditingNoteId(editingNoteId === note.id ? null : note.id)}
+                      className={`p-3 rounded-xl transition-all ${editingNoteId === note.id ? 'bg-emerald-500 text-white' : 'bg-white/5 hover:bg-white/10'}`}
+                    >
+                      <Edit3 size={20} />
+                    </button>
+                  </div>
 
-                      {editingNoteId === note.id ? (
-                        <div className="space-y-6 mt-2 animate-in slide-in-from-top-4 duration-300">
-                           <div className="grid grid-cols-2 gap-6">
-                              <div className="space-y-2 opacity-40">
-                                 <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest px-1">اسم العملة (مقفل)</label>
-                                 <div className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-sm font-bold flex items-center gap-2">
-                                    <Shield size={14} className="text-gray-600" /> {note.name}
-                                 </div>
-                              </div>
-                              <div className="space-y-2 opacity-40">
-                                 <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest px-1">القيمة (مقفل)</label>
-                                 <div className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-sm font-black flex items-center gap-2">
-                                    <Shield size={14} className="text-gray-600" /> {note.value}
-                                 </div>
-                              </div>
-                           </div>
-                           
-                           <div className="space-y-2">
-                              <label className="text-[10px] text-gray-400 font-black uppercase tracking-widest px-1">تحديث ميزات الأمان</label>
-                              <textarea 
-                                value={note.securityFeatures.join(', ')} 
-                                onChange={(e) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, securityFeatures: e.target.value.split(',').map(s => s.trim())} : n))}
-                                className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-sm outline-none h-24 resize-none focus:border-emerald-500/50 transition-colors font-medium leading-relaxed" 
-                                placeholder="علامة مائية، خيط أمان..."
-                              />
-                           </div>
-
-                           <div className="grid grid-cols-2 gap-6">
-                              <div className="space-y-3">
-                                 <label className="text-[10px] text-gray-400 font-black uppercase tracking-widest px-1">تحديث الوجه الأمامي</label>
-                                 <div className="aspect-[2/1] glass rounded-[1.5rem] border-2 border-dashed border-white/10 overflow-hidden relative cursor-pointer group/img" onClick={() => frontInputRef.current?.click()}>
-                                    <img src={note.frontImage} className="w-full h-full object-cover opacity-40 group-hover/img:opacity-80 transition-all group-hover/img:scale-105" />
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px]">
-                                       <Upload size={24} className="mb-1" />
-                                       <span className="text-[10px] font-black uppercase tracking-tighter">رفع الوجه الأمامي</span>
-                                    </div>
-                                    <input 
-                                        type="file" 
-                                        className="hidden" 
-                                        onChange={(e) => handleInstantImageUpload(e, `banknotes/${note.id}/front`, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, frontImage: url} : n)))} 
-                                        accept="image/*"
-                                    />
-                                 </div>
-                              </div>
-                              <div className="space-y-3">
-                                 <label className="text-[10px] text-gray-400 font-black uppercase tracking-widest px-1">تحديث الوجه الخلفي</label>
-                                 <div className="aspect-[2/1] glass rounded-[1.5rem] border-2 border-dashed border-white/10 overflow-hidden relative cursor-pointer group/img" onClick={() => backInputRef.current?.click()}>
-                                    <img src={note.backImage} className="w-full h-full object-cover opacity-40 group-hover/img:opacity-80 transition-all group-hover/img:scale-105" />
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px]">
-                                       <Upload size={24} className="mb-1" />
-                                       <span className="text-[10px] font-black uppercase tracking-tighter">رفع الوجه الخلفي</span>
-                                    </div>
-                                    <input 
-                                        type="file" 
-                                        className="hidden" 
-                                        onChange={(e) => handleInstantImageUpload(e, `banknotes/${note.id}/back`, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, backImage: url} : n)))} 
-                                        accept="image/*"
-                                    />
-                                 </div>
-                              </div>
-                           </div>
-                           <div className="pt-2">
-                               <button 
-                                onClick={() => setEditingNoteId(null)}
-                                className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all"
-                               >
-                                   حفظ التغييرات للفئة
-                               </button>
-                           </div>
+                  {editingNoteId === note.id && (
+                    <div className="space-y-6 pt-4 animate-in slide-in-from-top-4 duration-300">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-500">ميزات الأمان (قائمة نصوص)</label>
+                        <textarea 
+                          value={note.securityFeatures.join(', ')} 
+                          onChange={(e) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, securityFeatures: e.target.value.split(',').map(s => s.trim())} : n))}
+                          className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-sm outline-none h-24 focus:border-emerald-500/50"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-gray-500">الوجه الأمامي</label>
+                          <div className="aspect-[2/1] glass rounded-2xl overflow-hidden cursor-pointer relative group/img">
+                            <img src={note.frontImage} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                              <Upload size={24} />
+                            </div>
+                            <input type="file" className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, `banknotes/${note.id}/front`, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, frontImage: url} : n)))} />
+                          </div>
                         </div>
-                      ) : (
-                        <div className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                           <div className="flex-1 space-y-2">
-                              <p className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Preview Front</p>
-                              <img src={note.frontImage} className="w-full h-20 rounded-xl object-cover border border-white/10" />
-                           </div>
-                           <div className="flex-1 space-y-2">
-                              <p className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Preview Back</p>
-                              <img src={note.backImage} className="w-full h-20 rounded-xl object-cover border border-white/10" />
-                           </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-gray-500">الوجه الخلفي</label>
+                          <div className="aspect-[2/1] glass rounded-2xl overflow-hidden cursor-pointer relative group/img">
+                            <img src={note.backImage} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                              <Upload size={24} />
+                            </div>
+                            <input type="file" className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, `banknotes/${note.id}/back`, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, backImage: url} : n)))} />
+                          </div>
                         </div>
-                      )}
-                   </div>
-                 ))}
-               </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
           {activeTab === 'users' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
-               <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 space-y-8 shadow-2xl">
-                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-white/5 pb-8">
-                     <div className="space-y-1">
-                        <h3 className="text-xl font-black">إدارة المواطنين المسجلين</h3>
-                        <p className="text-xs text-gray-500">مراقبة الحسابات المالية النشطة لعام 2026</p>
-                     </div>
-                     <div className="relative w-full lg:w-96">
-                        <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-                        <input 
-                            type="text" 
-                            placeholder="بحث عن مواطن بالاسم أو رقم الحساب..."
-                            value={userSearch}
-                            onChange={(e) => setUserSearch(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 p-4 pr-12 rounded-2xl outline-none focus:border-emerald-500/50 text-sm font-bold"
-                        />
-                     </div>
-                  </div>
+            <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 space-y-10 animate-in fade-in duration-500">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 border-b border-white/5 pb-8">
+                <div className="space-y-1">
+                  <h3 className="text-xl font-black">قاعدة بيانات المواطنين</h3>
+                  <p className="text-sm text-gray-500">مراقبة الحسابات المالية المفعلة لعام 2026.</p>
+                </div>
+                <div className="relative w-full lg:w-96">
+                  <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                  <input 
+                    type="text" placeholder="بحث بالاسم أو رقم الحساب..." 
+                    value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 p-4 pr-12 rounded-2xl outline-none focus:border-emerald-500/50 font-bold"
+                  />
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                     {filteredUsers.length > 0 ? filteredUsers.map((user, idx) => (
-                        <div key={idx} className="glass p-6 rounded-[2rem] border border-white/5 flex items-center gap-5 hover:border-emerald-500/30 transition-all group hover:bg-emerald-500/5">
-                           <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-500/20 group-hover:border-emerald-500/50 transition-all shadow-xl">
-                              {user.photoUrl ? (
-                                <img src={user.photoUrl} className="w-full h-full object-cover" />
-                              ) : (
-                                <UserIcon className="m-4 text-emerald-400" />
-                              )}
-                           </div>
-                           <div className="flex-1 overflow-hidden">
-                              <h5 className="font-black text-base truncate">{user.name}</h5>
-                              <div className="flex items-center gap-3 mt-1.5">
-                                 <span className="text-[10px] bg-emerald-500 text-white px-2.5 py-1 rounded-lg font-mono font-black shadow-lg shadow-emerald-500/20">#{user.accountNumber}</span>
-                                 <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                                 <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Online</span>
-                              </div>
-                           </div>
-                        </div>
-                     )) : (
-                        <div className="col-span-full py-24 text-center space-y-6">
-                           <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-dashed border-white/10">
-                              <Users className="text-gray-700 opacity-20" size={48} />
-                           </div>
-                           <p className="text-gray-500 font-black text-lg">لم يتم العثور على أي بيانات مطابقة.</p>
-                        </div>
-                     )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredUsers.length > 0 ? filteredUsers.map((u, idx) => (
+                  <div key={idx} className="glass p-6 rounded-3xl border border-white/5 flex items-center gap-5 hover:bg-white/5 transition-all">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-500/20 shadow-xl">
+                      {u.photoUrl ? <img src={u.photoUrl} className="w-full h-full object-cover" /> : <UserIcon className="m-4 text-emerald-400" />}
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <h5 className="font-black text-lg truncate">{u.name}</h5>
+                      <span className="text-xs font-mono font-bold text-emerald-400">#{u.accountNumber}</span>
+                    </div>
                   </div>
-               </div>
+                )) : (
+                  <div className="col-span-full py-12 text-center text-gray-500 font-bold italic">لا يوجد مستخدمين مسجلين حالياً.</div>
+                )}
+              </div>
             </div>
           )}
 
           {activeTab === 'services' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
-               <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 space-y-10 shadow-2xl">
-                  <h3 className="text-xl font-black border-b border-white/5 pb-8 flex items-center gap-3">
-                     <Megaphone className="text-emerald-400" size={22} />
-                     إدارة الخدمات الإضافية
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                     <div className="space-y-4">
-                        <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">رابط الدعم الفني المباشر</label>
-                        <div className="relative">
-                           <Headset className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500" size={20} />
-                           <input 
-                              type="text"
-                              value={settings.services.supportLink}
-                              onChange={(e) => setSettings({...settings, services: {...settings.services, supportLink: e.target.value}})}
-                              className="w-full bg-white/5 border border-white/10 p-5 pr-14 rounded-2xl outline-none focus:border-emerald-500/50 font-bold transition-all"
-                              placeholder="https://wa.me/..."
-                           />
-                        </div>
-                     </div>
-                     <div className="space-y-4">
-                        <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">شريط الإعلانات المركزي</label>
-                        <div className="relative">
-                           <Megaphone className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500" size={20} />
-                           <input 
-                              type="text"
-                              value={settings.services.newsTicker}
-                              onChange={(e) => setSettings({...settings, services: {...settings.services, newsTicker: e.target.value}})}
-                              className="w-full bg-white/5 border border-white/10 p-5 pr-14 rounded-2xl outline-none focus:border-emerald-500/50 font-bold transition-all"
-                              placeholder="اكتب التنبيه الرسمي هنا..."
-                           />
-                        </div>
-                     </div>
-                  </div>
+            <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 space-y-10 animate-in fade-in duration-500 shadow-2xl">
+              <h3 className="text-xl font-black border-b border-white/5 pb-8 flex items-center gap-3">
+                 <Megaphone className="text-emerald-400" size={22} /> إدارة الخدمات والاتصال
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                 <div className="space-y-4">
+                    <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">رابط الدعم الفني</label>
+                    <input 
+                      type="text" value={settings.services.supportLink}
+                      onChange={(e) => setSettings({...settings, services: {...settings.services, supportLink: e.target.value}})}
+                      className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 font-bold"
+                    />
+                 </div>
+                 <div className="space-y-4">
+                    <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">شريط الأخبار العاجل</label>
+                    <input 
+                      type="text" value={settings.services.newsTicker}
+                      onChange={(e) => setSettings({...settings, services: {...settings.services, newsTicker: e.target.value}})}
+                      className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 font-bold"
+                    />
+                 </div>
+              </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 pt-6">
-                     {[
-                        { id: 'showConverter', label: 'المحول السريع', icon: Coins },
-                        { id: 'showGallery', label: 'دليل الفئات', icon: Grid },
-                        { id: 'showNews', label: 'شريط التنبيهات', icon: Megaphone },
-                     ].map((service) => (
-                        <button 
-                           key={service.id}
-                           onClick={() => toggleService(service.id as any)}
-                           className={`p-8 rounded-[2rem] border-2 flex flex-col items-center gap-6 transition-all group ${settings.services[service.id as keyof typeof settings.services] ? 'bg-emerald-500 text-white border-emerald-500 shadow-xl shadow-emerald-500/20' : 'bg-white/5 border-white/10 text-gray-500 hover:bg-white/10 opacity-70'}`}
-                        >
-                           <service.icon size={32} className={`group-hover:scale-110 transition-transform ${settings.services[service.id as keyof typeof settings.services] ? 'text-white' : 'text-gray-500'}`} />
-                           <span className="text-base font-black uppercase tracking-tighter">{service.label}</span>
-                           <div className="pt-2">
-                             {settings.services[service.id as keyof typeof settings.services] ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
-                           </div>
-                        </button>
-                     ))}
-                  </div>
-               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                 {[
+                    { id: 'showConverter', label: 'المحول', icon: Coins },
+                    { id: 'showGallery', label: 'الفئات', icon: Grid },
+                    { id: 'showNews', label: 'الأخبار', icon: Megaphone },
+                 ].map((service) => (
+                    <button 
+                       key={service.id}
+                       onClick={() => toggleService(service.id as any)}
+                       className={`p-8 rounded-[2rem] border-2 flex flex-col items-center gap-6 transition-all ${settings.services[service.id as keyof typeof settings.services] ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white/5 border-white/10 text-gray-500 opacity-60'}`}
+                    >
+                       <service.icon size={32} />
+                       <span className="font-black">{service.label}</span>
+                       {settings.services[service.id as keyof typeof settings.services] ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                    </button>
+                 ))}
+              </div>
             </div>
           )}
 
           {activeTab === 'maintenance' && (
             <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 space-y-10 animate-in fade-in duration-500 shadow-2xl">
-              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border-b border-white/5 pb-8">
-                <div className="space-y-1">
-                  <h3 className="text-xl font-black flex items-center gap-3">
-                     <Clock className="text-amber-500" size={22} />
-                     بروتوكول الصيانة المركزي
-                  </h3>
-                  <p className="text-gray-500 text-xs">يتم حجب المنصة بالكامل عن الجمهور عند تفعيل هذا الوضع.</p>
-                </div>
+              <div className="flex justify-between items-center border-b border-white/5 pb-8">
+                <h3 className="text-xl font-black flex items-center gap-3">
+                   <Clock className="text-amber-500" size={22} /> وضع الصيانة
+                </h3>
                 <button 
-                  onClick={() => setSettings({ 
-                    ...settings, 
-                    maintenance: { ...settings.maintenance, isPaused: !settings.maintenance.isPaused } 
-                  })}
-                  className={`w-full lg:w-auto px-10 py-4 rounded-2xl font-black transition-all shadow-2xl ${settings.maintenance.isPaused ? 'bg-red-500 text-white shadow-red-500/30' : 'bg-amber-500 text-white shadow-amber-500/30 hover:bg-amber-600'}`}
+                  onClick={() => setSettings({...settings, maintenance: {...settings.maintenance, isPaused: !settings.maintenance.isPaused}})}
+                  className={`px-8 py-3 rounded-2xl font-black ${settings.maintenance.isPaused ? 'bg-red-500' : 'bg-amber-500'}`}
                 >
-                  {settings.maintenance.isPaused ? 'إيقاف الصيانة فوراً' : 'تفعيل وضع الصيانة'}
+                  {settings.maintenance.isPaused ? 'إيقاف الصيانة' : 'تفعيل الصيانة'}
                 </button>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-3">
-                  <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">توقيت البدء المجدول</label>
-                  <input 
-                    type="datetime-local" 
-                    value={settings.maintenance.startTime}
-                    onChange={(e) => setSettings({ ...settings, maintenance: { ...settings.maintenance, startTime: e.target.value }})}
-                    className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 font-bold" 
-                  />
-                </div>
-                <div className="space-y-3">
-                  <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">توقيت الانتهاء المتوقع</label>
-                  <input 
-                    type="datetime-local" 
-                    value={settings.maintenance.endTime}
-                    onChange={(e) => setSettings({ ...settings, maintenance: { ...settings.maintenance, endTime: e.target.value }})}
-                    className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 font-bold" 
-                  />
-                </div>
-                <div className="md:col-span-2 space-y-3">
-                  <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">نص التوضيح للمستخدمين</label>
-                  <textarea 
-                    value={settings.maintenance.reason}
-                    onChange={(e) => setSettings({ ...settings, maintenance: { ...settings.maintenance, reason: e.target.value }})}
-                    className="w-full bg-white/5 border border-white/10 p-6 rounded-[2rem] outline-none h-40 resize-none focus:border-emerald-500/50 transition-all font-medium leading-relaxed" 
-                    placeholder="اكتب هنا سبب الصيانة بالتفصيل..."
-                  />
-                </div>
+                 <input type="datetime-local" value={settings.maintenance.startTime} onChange={(e) => setSettings({...settings, maintenance: {...settings.maintenance, startTime: e.target.value}})} className="bg-white/5 border border-white/10 p-5 rounded-2xl outline-none" />
+                 <input type="datetime-local" value={settings.maintenance.endTime} onChange={(e) => setSettings({...settings, maintenance: {...settings.maintenance, endTime: e.target.value}})} className="bg-white/5 border border-white/10 p-5 rounded-2xl outline-none" />
+                 <textarea value={settings.maintenance.reason} onChange={(e) => setSettings({...settings, maintenance: {...settings.maintenance, reason: e.target.value}})} className="md:col-span-2 bg-white/5 border border-white/10 p-5 rounded-2xl outline-none h-32" />
               </div>
             </div>
           )}
         </div>
       </main>
-      
-      <style>{`
-        .custom-scroll::-webkit-scrollbar {
-          width: 4px;
-        }
-        .custom-scroll::-webkit-scrollbar-track {
-          background: rgba(255,255,255,0.02);
-        }
-        .custom-scroll::-webkit-scrollbar-thumb {
-          background: rgba(16, 185, 129, 0.2);
-          border-radius: 10px;
-        }
-      `}</style>
     </div>
   );
 };

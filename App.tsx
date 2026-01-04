@@ -89,9 +89,15 @@ const App: React.FC = () => {
 
   if (settings.maintenance.isPaused && !isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617] text-center">
-        <div className="max-w-md space-y-8 animate-in fade-in zoom-in duration-700">
-          <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto border border-amber-500/30">
+      <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617] text-center relative overflow-hidden">
+        {settings.visual.globalBackgroundImage && (
+            <div 
+                className="fixed inset-0 z-[-1] opacity-60 bg-cover bg-center transition-opacity duration-1000"
+                style={{ backgroundImage: `url(${settings.visual.globalBackgroundImage})` }}
+            />
+        )}
+        <div className="max-w-md space-y-8 animate-in fade-in zoom-in duration-700 z-10">
+          <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto border border-amber-500/30 backdrop-blur-md">
             <Clock className="text-amber-500 animate-pulse" size={48} />
           </div>
           <h1 className="text-4xl font-black">نحن في صيانة</h1>
@@ -135,7 +141,33 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen relative pb-24 md:pb-12 overflow-x-hidden">
+      {/* Background Layers */}
       <div className="animated-bg" />
+      {settings.visual.globalBackgroundImage && (
+        <div 
+            className="fixed inset-0 z-[-1] opacity-50 bg-cover bg-center pointer-events-none transition-opacity duration-1000"
+            style={{ backgroundImage: `url(${settings.visual.globalBackgroundImage})` }}
+        />
+      )}
+
+      {/* Floating Images Layer */}
+      <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
+          {settings.visual.floatingImages.map((img) => (
+              <img 
+                key={img.id}
+                src={img.url}
+                className="absolute floating"
+                style={{
+                    top: `${img.top}%`,
+                    left: `${img.left}%`,
+                    width: `${img.size}px`,
+                    animationDuration: `${img.animationDuration}s`,
+                    opacity: 0.6,
+                    filter: 'drop-shadow(0 0 10px rgba(0,0,0,0.5))'
+                }}
+              />
+          ))}
+      </div>
       
       <Header 
         onAdminClick={() => setShowPinPad(true)} 
@@ -147,7 +179,7 @@ const App: React.FC = () => {
       />
 
       {settings.services.showNews && settings.services.newsTicker && (
-        <div className="fixed top-[64px] md:top-[80px] left-0 right-0 z-40 bg-emerald-500/10 backdrop-blur-md border-b border-emerald-500/20 overflow-hidden h-10 flex items-center">
+        <div className="fixed top-[64px] md:top-[80px] left-0 right-0 z-40 bg-emerald-500/10 backdrop-blur-xl border-b border-emerald-500/20 overflow-hidden h-10 flex items-center">
           <div className="flex items-center gap-2 px-4 bg-emerald-500 h-full text-white font-bold text-xs shrink-0 z-10 shadow-lg">
             <Megaphone size={14} />
             تنبيه
@@ -165,7 +197,7 @@ const App: React.FC = () => {
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {user && (
               <div className="glass p-4 rounded-2xl mb-8 flex items-center gap-4 border-emerald-500/20 animate-in slide-in-from-top-2">
-                <div className="w-12 h-12 rounded-full border-2 border-emerald-500/40 overflow-hidden bg-slate-800">
+                <div className="w-12 h-12 rounded-full border-2 border-emerald-500/40 overflow-hidden bg-slate-800 shadow-xl">
                    {user.photoUrl ? <img src={user.photoUrl} className="w-full h-full object-cover" /> : <UserIcon className="m-2 text-emerald-500" />}
                 </div>
                 <div>
@@ -184,7 +216,7 @@ const App: React.FC = () => {
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-8">
               <MarketPulse settings={settings} formatNumber={formatNumber} />
-              <div className="glass p-8 rounded-2xl flex flex-col items-center justify-center text-center space-y-4">
+              <div className="glass p-8 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 shadow-2xl">
                 <ShieldCheck size={48} className="text-emerald-400" />
                 <h3 className="font-black text-xl">نظام محمي 2026</h3>
                 <p className="text-sm text-gray-400">جميع العمليات تخضع لأعلى معايير التشفير المالي لضمان سلامة مدخراتكم.</p>
@@ -204,7 +236,7 @@ const App: React.FC = () => {
           settings.services.showGallery ? (
             <div className="animate-in fade-in zoom-in-95 duration-500"><BanknoteGallery banknotes={banknotes} /></div>
           ) : (
-            <div className="text-center py-20">عذراً، هذه الخدمة غير متوفرة حالياً.</div>
+            <div className="text-center py-20 font-bold glass rounded-3xl p-12">عذراً، هذه الخدمة غير متوفرة حالياً.</div>
           )
         )}
       </main>
@@ -219,7 +251,7 @@ const App: React.FC = () => {
         <span className="hidden md:block font-bold">الدعم المالي</span>
       </a>
 
-      <div className="fixed bottom-0 left-0 right-0 glass border-t border-white/10 md:hidden z-[100] px-2 py-3">
+      <div className="fixed bottom-0 left-0 right-0 glass border-t border-white/10 md:hidden z-[100] px-2 py-3 backdrop-blur-2xl">
         <div className="flex justify-around items-center">
           {navItems.map((item) => (
             <button
@@ -237,7 +269,7 @@ const App: React.FC = () => {
       <div className="fixed bottom-20 left-4 md:bottom-10 md:left-6 z-40">
         <button 
           onClick={toggleNumberMode}
-          className="p-3 md:p-4 glass rounded-full shadow-2xl hover:scale-110 transition-transform text-emerald-400 border border-emerald-500/20"
+          className="p-3 md:p-4 glass rounded-full shadow-2xl hover:scale-110 transition-transform text-emerald-400 border border-emerald-500/20 backdrop-blur-xl"
         >
           <div className="text-sm md:text-lg font-bold">{numberMode === 'latin' ? '١٢٣' : '123'}</div>
         </button>

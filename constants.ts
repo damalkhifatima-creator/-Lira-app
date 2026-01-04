@@ -46,7 +46,7 @@ export const INITIAL_BANKNOTES: Banknote[] = [
     value: 200,
     name: '200 ليرة جديدة',
     frontImage: 'https://images.unsplash.com/photo-1621933486609-2d8759af9998?auto=format&fit=crop&q=80&w=800',
-    backImage: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&q=80&w=800',
+    backImage: 'https://images.unsplash.com/photo-155526324-4b87b5e36e44?auto=format&fit=crop&q=80&w=800',
     securityFeatures: ['حبر يتغير لوناً', 'خيط أمان مزدوج', 'طباعة ميكروسكوبية'],
     purchasingPower: 'تكفي لتسوق منزلي بسيط.'
   },
@@ -75,7 +75,9 @@ export const INITIAL_SETTINGS: AppSettings = {
   },
   visual: {
     primaryColor: '#10b981',
-    themeMode: 'glass'
+    themeMode: 'glass',
+    globalBackgroundImage: '',
+    floatingImages: []
   },
   services: {
     supportLink: 'https://wa.me/963',

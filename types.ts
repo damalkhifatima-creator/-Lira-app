@@ -9,6 +9,15 @@ export interface Banknote {
   purchasingPower: string;
 }
 
+export interface FloatingImage {
+  id: string;
+  url: string;
+  top: number; // percentage
+  left: number; // percentage
+  size: number; // pixels
+  animationDuration: number; // seconds
+}
+
 export interface MaintenanceConfig {
   isPaused: boolean;
   startTime: string;
@@ -19,6 +28,8 @@ export interface MaintenanceConfig {
 export interface VisualIdentity {
   primaryColor: string;
   themeMode: 'dark' | 'glass';
+  globalBackgroundImage: string;
+  floatingImages: FloatingImage[];
 }
 
 export interface AppServices {

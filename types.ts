@@ -9,31 +9,31 @@ export interface Banknote {
   purchasingPower: string;
 }
 
-export interface GoldRates {
-  k24: number;
-  k21: number;
-  k18: number;
-  ounce: number;
+export interface MaintenanceConfig {
+  isPaused: boolean;
+  startTime: string;
+  endTime: string;
+  reason: string;
+}
+
+export interface VisualIdentity {
+  primaryColor: string;
+  themeMode: 'dark' | 'glass';
 }
 
 export interface AppSettings {
   siteName: string;
   logoUrl: string;
   aboutText: string;
-  maintenanceMode: boolean;
-  usdRate: number;
+  maintenance: MaintenanceConfig;
+  visual: VisualIdentity;
   conversionFactor: number;
-  goldRates: GoldRates;
 }
 
-export interface VisitorStats {
-  count: number;
-  lastVisit: string;
+export interface User {
+  name: string;
+  pin: string;
+  photoUrl: string;
 }
 
 export type NumberMode = 'arabic' | 'latin';
-
-export interface ChatMessage {
-  role: 'user' | 'model';
-  text: string;
-}

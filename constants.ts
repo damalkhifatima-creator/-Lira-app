@@ -2,7 +2,6 @@
 import { Banknote, AppSettings } from './types';
 
 export const CONVERSION_FACTOR = 100; 
-export const USD_RATE = 50; 
 export const DENOMINATIONS = [10, 25, 50, 100, 200, 500];
 
 export const INITIAL_BANKNOTES: Banknote[] = [
@@ -65,14 +64,16 @@ export const INITIAL_BANKNOTES: Banknote[] = [
 export const INITIAL_SETTINGS: AppSettings = {
   siteName: 'خبير العملة السورية 2026',
   logoUrl: '',
-  aboutText: 'منصة تقنية متكاملة تهدف إلى تسهيل عملية الانتقال النقدي للمواطن السوري في عام 2026، من خلال أدوات تقييم دقيقة ومعلومات موثوقة حول الفئات النقدية الجديدة.',
-  maintenanceMode: false,
-  usdRate: 50,
-  conversionFactor: 100,
-  goldRates: {
-    k24: 1250,
-    k21: 1095,
-    k18: 938,
-    ounce: 38875
-  }
+  aboutText: 'منصة تقنية متكاملة تهدف إلى تسهيل عملية الانتقال النقدي للمواطن السوري في عام 2026.',
+  maintenance: {
+    isPaused: false,
+    startTime: '',
+    endTime: '',
+    reason: 'تحسينات دورية للنظام المالي'
+  },
+  visual: {
+    primaryColor: '#10b981',
+    themeMode: 'glass'
+  },
+  conversionFactor: 100
 };

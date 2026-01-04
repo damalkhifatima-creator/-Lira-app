@@ -1,0 +1,7 @@
+{
+  "name": "Syrian Currency Expert 2026",
+  "description": "A comprehensive financial platform for evaluating and converting the new 2026 Syrian currency denominations with high security and market pulse features.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

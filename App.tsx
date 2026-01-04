@@ -11,8 +11,9 @@ import PinPad from './components/Admin/PinPad';
 import Dashboard from './components/Admin/Dashboard';
 import AuthModal from './components/User/AuthModal';
 import HowItWorksModal from './components/Home/HowItWorksModal';
-import { AppSettings, NumberMode, User, Banknote } from './types';
+import { AppSettings, NumberMode, User, Banknote, FloatingImage } from './types';
 import { INITIAL_SETTINGS, INITIAL_BANKNOTES } from './constants';
+import { supabase } from './supabase';
 
 const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -25,33 +26,114 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [allUsers, setAllUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('syr_all_users_v5');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [allUsers, setAllUsers] = useState<User[]>([]);
 
   const [activeTab, setActiveTab] = useState<'home' | 'calc' | 'conv' | 'gallery'>('home');
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    const saved = localStorage.getItem('syr_app_settings_v5');
-    return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
-  });
-  const [banknotes, setBanknotes] = useState<Banknote[]>(() => {
-    const saved = localStorage.getItem('syr_banknotes_v5');
-    return saved ? JSON.parse(saved) : INITIAL_BANKNOTES;
-  });
+  const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
+  const [banknotes, setBanknotes] = useState<Banknote[]>(INITIAL_BANKNOTES);
   const [numberMode, setNumberMode] = useState<NumberMode>('latin');
 
+  // Load Initial Data from Supabase
   useEffect(() => {
-    localStorage.setItem('syr_app_settings_v5', JSON.stringify(settings));
-  }, [settings]);
+    const fetchData = async () => {
+      // 1. Fetch App Settings
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('app_settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+      
+      if (settingsData && !settingsError) {
+        setSettings({
+          siteName: settingsData.site_name,
+          logoUrl: settingsData.logo_url,
+          logoShape: settingsData.logo_shape,
+          logoSize: settingsData.logo_size,
+          aboutText: settingsData.about_text,
+          maintenance: {
+            isPaused: settingsData.maintenance_is_paused,
+            startTime: settingsData.maintenance_start_time,
+            endTime: settingsData.maintenance_end_time,
+            reason: settingsData.maintenance_reason
+          },
+          visual: {
+            primaryColor: settingsData.visual_primary_color,
+            themeMode: settingsData.visual_theme_mode,
+            globalBackgroundImage: settingsData.visual_global_background_image,
+            floatingImages: [] // Will fetch separately
+          },
+          services: {
+            supportLink: settingsData.services_support_link,
+            newsTicker: settingsData.services_news_ticker,
+            showConverter: settingsData.services_show_converter,
+            showGallery: settingsData.services_show_gallery,
+            showNews: settingsData.services_show_news
+          },
+          conversionFactor: settingsData.conversion_factor
+        });
+      }
 
-  useEffect(() => {
-    localStorage.setItem('syr_banknotes_v5', JSON.stringify(banknotes));
-  }, [banknotes]);
+      // 2. Fetch Banknotes
+      const { data: notesData } = await supabase.from('banknotes').select('*').order('value', { ascending: true });
+      if (notesData) {
+        setBanknotes(notesData.map(n => ({
+          id: n.id,
+          value: n.value,
+          name: n.name,
+          frontImage: n.front_image,
+          backImage: n.back_image,
+          securityFeatures: n.security_features,
+          purchasingPower: n.purchasing_power
+        })));
+      }
 
-  useEffect(() => {
-    localStorage.setItem('syr_all_users_v5', JSON.stringify(allUsers));
-  }, [allUsers]);
+      // 3. Fetch Floating Images
+      const { data: floatData } = await supabase.from('floating_images').select('*');
+      if (floatData) {
+        const floatImages: FloatingImage[] = floatData.map(f => ({
+          id: f.id,
+          url: f.url,
+          top: f.top_pos,
+          left: f.left_pos,
+          size: f.size_px,
+          animationDuration: f.duration
+        }));
+        setSettings(prev => ({
+          ...prev,
+          visual: { ...prev.visual, floatingImages: floatImages }
+        }));
+      }
+
+      // 4. Fetch Profiles
+      const { data: profileData } = await supabase.from('profiles').select('*');
+      if (profileData) {
+        setAllUsers(profileData.map(p => ({
+          name: p.full_name,
+          pin: p.pin_code,
+          photoUrl: p.photo_url,
+          accountNumber: p.account_number
+        })));
+      }
+    };
+
+    fetchData();
+
+    // Set up Realtime Subscriptions
+    const settingsSub = supabase
+      .channel('public:app_settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, fetchData)
+      .subscribe();
+
+    const floatSub = supabase
+      .channel('public:floating_images')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'floating_images' }, fetchData)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(settingsSub);
+      supabase.removeChannel(floatSub);
+    };
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -78,8 +160,16 @@ const App: React.FC = () => {
     return false;
   };
 
-  const handleRegisterUser = (newUser: User) => {
+  const handleRegisterUser = async (newUser: User) => {
     setUser(newUser);
+    // Sync with Supabase
+    await supabase.from('profiles').upsert({
+      id: (await supabase.auth.getUser()).data.user?.id || crypto.randomUUID(), // Fallback if not using Auth
+      full_name: newUser.name,
+      account_number: newUser.accountNumber,
+      photo_url: newUser.photoUrl,
+      pin_code: newUser.pin
+    });
     setAllUsers(prev => [...prev, newUser]);
   };
 

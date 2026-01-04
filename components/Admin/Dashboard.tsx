@@ -8,6 +8,7 @@ import {
   Coins, Trash2, Plus, Info, ImagePlus
 } from 'lucide-react';
 import { AppSettings, Banknote, User, FloatingImage } from '../../types';
+import { supabase } from '../../supabase';
 
 interface DashboardProps {
   settings: AppSettings;
@@ -23,6 +24,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   
   const logoInputRef = useRef<HTMLInputElement>(null);
   const globalBgInputRef = useRef<HTMLInputElement>(null);
@@ -37,48 +39,104 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
     );
   }, [users, userSearch]);
 
-  const handleInstantImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (data: string) => void) => {
+  const uploadToSupabase = async (file: File, path: string): Promise<string | null> => {
+    const fileName = `${Date.now()}_${file.name}`;
+    const { data, error } = await supabase.storage
+      .from('assets')
+      .upload(`${path}/${fileName}`, file);
+
+    if (error) {
+      console.error('Upload Error:', error);
+      return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(data.path);
+    return publicUrl;
+  };
+
+  const handleInstantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, path: string, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Use URL for immediate UI update
+      // Local preview
       const previewUrl = URL.createObjectURL(file);
       callback(previewUrl);
 
-      // Convert to base64 for persistent storage
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        callback(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      // S3/Supabase upload
+      const uploadedUrl = await uploadToSupabase(file, path);
+      if (uploadedUrl) {
+        callback(uploadedUrl);
+      }
     }
   };
 
-  const addFloatingImage = (url: string) => {
-    const newImg: FloatingImage = {
-        id: Math.random().toString(36).substring(7),
-        url: url,
-        top: 10 + Math.floor(Math.random() * 60),
-        left: 10 + Math.floor(Math.random() * 60),
-        size: 60 + Math.floor(Math.random() * 120),
-        animationDuration: 6 + Math.floor(Math.random() * 10)
-    };
-    setSettings({
-        ...settings,
-        visual: {
-            ...settings.visual,
-            floatingImages: [...settings.visual.floatingImages, newImg]
-        }
-    });
+  const handleGlobalSave = async () => {
+    setIsSaving(true);
+    try {
+      // Save Main Settings
+      const { error: settingsError } = await supabase
+        .from('app_settings')
+        .upsert({
+          id: 1,
+          site_name: settings.siteName,
+          logo_url: settings.logoUrl,
+          logo_shape: settings.logoShape,
+          logo_size: settings.logoSize,
+          about_text: settings.aboutText,
+          maintenance_is_paused: settings.maintenance.isPaused,
+          maintenance_start_time: settings.maintenance.startTime,
+          maintenance_end_time: settings.maintenance.endTime,
+          maintenance_reason: settings.maintenance.reason,
+          visual_primary_color: settings.visual.primaryColor,
+          visual_theme_mode: settings.visual.themeMode,
+          visual_global_background_image: settings.visual.globalBackgroundImage,
+          services_support_link: settings.services.supportLink,
+          services_news_ticker: settings.services.newsTicker,
+          services_show_converter: settings.services.showConverter,
+          services_show_gallery: settings.services.showGallery,
+          services_show_news: settings.services.showNews,
+          conversion_factor: settings.conversionFactor
+        });
+
+      if (settingsError) throw settingsError;
+
+      // Save Banknotes
+      for (const note of banknotes) {
+        await supabase.from('banknotes').upsert({
+          id: note.id,
+          value: note.value,
+          name: note.name,
+          front_image: note.frontImage,
+          back_image: note.backImage,
+          security_features: note.securityFeatures,
+          purchasing_power: note.purchasingPower
+        });
+      }
+
+      alert('تم حفظ جميع البيانات بنجاح في السحابة!');
+    } catch (err) {
+      console.error('Save Error:', err);
+      alert('حدث خطأ أثناء الحفظ. يرجى المحاولة لاحقاً.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const removeFloatingImage = (id: string) => {
-    setSettings({
-        ...settings,
-        visual: {
-            ...settings.visual,
-            floatingImages: settings.visual.floatingImages.filter(img => img.id !== id)
-        }
-    });
+  const addFloatingImage = async (url: string) => {
+    const newImg = {
+        id: Math.random().toString(36).substring(7),
+        url: url,
+        top_pos: 10 + Math.floor(Math.random() * 60),
+        left_pos: 10 + Math.floor(Math.random() * 60),
+        size_px: 60 + Math.floor(Math.random() * 120),
+        duration: 6 + Math.floor(Math.random() * 10)
+    };
+    
+    await supabase.from('floating_images').insert(newImg);
+    // Realtime will update the App state
+  };
+
+  const removeFloatingImage = async (id: string) => {
+    await supabase.from('floating_images').delete().eq('id', id);
   };
 
   const navItems = [
@@ -112,10 +170,8 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
 
   return (
     <div className="min-h-screen bg-[#020617] flex flex-col md:flex-row font-cairo text-white overflow-hidden relative">
-      {/* Background decoration in dashboard */}
       <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-emerald-500/5 blur-[120px] rounded-full z-0 pointer-events-none" />
       
-      {/* Mobile Top Bar */}
       <div className="md:hidden p-4 glass flex justify-between items-center z-[100] sticky top-0 backdrop-blur-2xl">
         <div className="flex items-center gap-2">
            <LayoutDashboard size={20} className="text-emerald-400" />
@@ -126,7 +182,6 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
         </button>
       </div>
 
-      {/* Sidebar */}
       <aside className={`
         fixed inset-y-0 right-0 w-72 md:w-64 lg:w-80 border-l border-white/5 p-6 flex flex-col glass z-[90] transition-transform duration-300 backdrop-blur-3xl
         ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0 md:static'}
@@ -161,7 +216,6 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
         </button>
       </aside>
 
-      {/* Main Panel Content */}
       <main className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto h-screen relative z-10">
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-4">
           <div className="space-y-1">
@@ -171,9 +225,13 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                 <span className="flex items-center gap-1"><Smartphone size={10} /> الهواتف الذكية</span>
             </div>
           </div>
-          <button className="w-full sm:w-auto px-10 py-4 bg-emerald-500 text-white rounded-2xl font-black shadow-2xl shadow-emerald-500/20 flex items-center justify-center gap-3 hover:bg-emerald-600 transition-all active:scale-95 group">
-              <Save size={18} className="group-hover:rotate-12 transition-transform" /> 
-              حفظ الإعدادات النهائية
+          <button 
+            onClick={handleGlobalSave}
+            disabled={isSaving}
+            className="w-full sm:w-auto px-10 py-4 bg-emerald-500 text-white rounded-2xl font-black shadow-2xl shadow-emerald-500/20 flex items-center justify-center gap-3 hover:bg-emerald-600 transition-all active:scale-95 group disabled:opacity-50"
+          >
+              <Save size={18} className={`${isSaving ? 'animate-spin' : 'group-hover:rotate-12 transition-transform'}`} /> 
+              {isSaving ? 'جاري الحفظ...' : 'حفظ الإعدادات النهائية'}
           </button>
         </header>
 
@@ -210,7 +268,6 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                 </div>
               </div>
 
-              {/* Background & Floating Images Section - Focused and Transparent */}
               <div className="glass p-6 md:p-10 rounded-[2.5rem] border border-white/5 space-y-10 shadow-2xl">
                  <div className="flex justify-between items-center border-b border-white/5 pb-6">
                     <h3 className="text-xl font-black flex items-center gap-3">
@@ -223,7 +280,6 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                  </div>
 
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                    {/* Global Background Management */}
                     <div className="space-y-6">
                        <div className="flex items-center justify-between">
                           <label className="text-sm font-black text-gray-300">الصورة الخلفية للمنصة</label>
@@ -245,7 +301,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                              <Upload className="text-white" size={32} />
                              <span className="text-xs font-bold text-white uppercase tracking-widest">تحديث الخلفية فوراً</span>
                           </div>
-                          <input type="file" ref={globalBgInputRef} className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, (url) => setSettings({...settings, visual: {...settings.visual, globalBackgroundImage: url}}))} />
+                          <input type="file" ref={globalBgInputRef} className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, 'backgrounds', (url) => setSettings({...settings, visual: {...settings.visual, globalBackgroundImage: url}}))} />
                        </div>
                        {settings.visual.globalBackgroundImage && (
                            <button onClick={(e) => { e.stopPropagation(); setSettings({...settings, visual: {...settings.visual, globalBackgroundImage: ''}})}} className="flex items-center gap-2 text-xs text-red-400 font-black hover:text-red-300 transition-colors bg-red-500/10 px-4 py-2 rounded-xl border border-red-500/20">
@@ -254,7 +310,6 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                        )}
                     </div>
 
-                    {/* Floating Images Management */}
                     <div className="space-y-6">
                        <div className="flex justify-between items-center">
                           <div className="space-y-1">
@@ -267,7 +322,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                           >
                              <Plus size={14} /> إضافة رمز
                           </button>
-                          <input type="file" ref={floatingInputRef} className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, (url) => addFloatingImage(url))} />
+                          <input type="file" ref={floatingInputRef} className="hidden" accept="image/*" onChange={(e) => handleInstantImageUpload(e, 'floating', (url) => addFloatingImage(url))} />
                        </div>
                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-[250px] overflow-y-auto pr-2 custom-scroll">
                           {settings.visual.floatingImages.map((img) => (
@@ -291,7 +346,6 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                  </div>
               </div>
 
-              {/* Logo Settings */}
               <div className="glass p-6 md:p-10 rounded-[2.5rem] border border-white/5 shadow-2xl">
                 <h3 className="text-xl font-black mb-8 border-b border-white/5 pb-6 flex items-center gap-3">
                    <Upload size={22} className="text-emerald-400" />
@@ -347,7 +401,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                       </div>
 
                       <div className="flex flex-wrap gap-3 pt-2">
-                        <input type="file" ref={logoInputRef} onChange={(e) => handleInstantImageUpload(e, (url) => setSettings({ ...settings, logoUrl: url }))} className="hidden" accept="image/*" />
+                        <input type="file" ref={logoInputRef} onChange={(e) => handleInstantImageUpload(e, 'logos', (url) => setSettings({ ...settings, logoUrl: url }))} className="hidden" accept="image/*" />
                         <button 
                             onClick={() => logoInputRef.current?.click()}
                             className="flex-1 sm:flex-none px-10 py-4 bg-white/5 hover:bg-emerald-500/10 border border-white/10 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3"
@@ -441,7 +495,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                                     <input 
                                         type="file" 
                                         className="hidden" 
-                                        onChange={(e) => handleInstantImageUpload(e, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, frontImage: url} : n)))} 
+                                        onChange={(e) => handleInstantImageUpload(e, `banknotes/${note.id}/front`, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, frontImage: url} : n)))} 
                                         accept="image/*"
                                     />
                                  </div>
@@ -457,7 +511,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                                     <input 
                                         type="file" 
                                         className="hidden" 
-                                        onChange={(e) => handleInstantImageUpload(e, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, backImage: url} : n)))} 
+                                        onChange={(e) => handleInstantImageUpload(e, `banknotes/${note.id}/back`, (url) => setBanknotes(banknotes.map(n => n.id === note.id ? {...n, backImage: url} : n)))} 
                                         accept="image/*"
                                     />
                                  </div>

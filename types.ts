@@ -9,6 +9,13 @@ export interface Banknote {
   purchasingPower: string;
 }
 
+export interface GoldRates {
+  k24: number;
+  k21: number;
+  k18: number;
+  ounce: number;
+}
+
 export interface AppSettings {
   siteName: string;
   logoUrl: string;
@@ -16,6 +23,7 @@ export interface AppSettings {
   maintenanceMode: boolean;
   usdRate: number;
   conversionFactor: number;
+  goldRates: GoldRates;
 }
 
 export interface VisitorStats {
@@ -24,3 +32,8 @@ export interface VisitorStats {
 }
 
 export type NumberMode = 'arabic' | 'latin';
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
+}

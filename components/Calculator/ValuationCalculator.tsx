@@ -12,11 +12,13 @@ interface ValuationCalculatorProps {
 
 const ValuationCalculator: React.FC<ValuationCalculatorProps> = ({ settings, formatNumber }) => {
   const [counts, setCounts] = useState<Record<number, number>>(
-    DENOMINATIONS.reduce((acc, den) => ({ ...acc, [den]: 0 }), {})
+    /* Fixed: Added explicit type cast 'as Record<number, number>' to the reduce accumulator to ensure 'counts' state is correctly initialized */
+    DENOMINATIONS.reduce((acc, den) => ({ ...acc, [den]: 0 }), {} as Record<number, number>)
   );
 
   const totalNew = useMemo(() => {
-    return Object.entries(counts).reduce((sum, [den, count]) => sum + (Number(den) * count), 0);
+    /* Fixed: Added explicit types to sum and count parameters in reduce to ensure the arithmetic operation RHS is correctly identified as a number */
+    return Object.entries(counts).reduce((sum: number, [den, count]: [string, number]) => sum + (Number(den) * count), 0);
   }, [counts]);
 
   const totalOld = totalNew * settings.conversionFactor;
@@ -35,7 +37,8 @@ const ValuationCalculator: React.FC<ValuationCalculatorProps> = ({ settings, for
   };
 
   const reset = () => {
-    setCounts(DENOMINATIONS.reduce((acc, den) => ({ ...acc, [den]: 0 }), {}));
+    /* Fixed: Added type cast to ensure consistency in reset logic */
+    setCounts(DENOMINATIONS.reduce((acc, den) => ({ ...acc, [den]: 0 }), {} as Record<number, number>));
   };
 
   const exportPDF = () => {

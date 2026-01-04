@@ -24,6 +24,8 @@ export interface VisualIdentity {
 export interface AppSettings {
   siteName: string;
   logoUrl: string;
+  logoShape: 'circle' | 'square' | 'rectangle';
+  logoSize: number;
   aboutText: string;
   maintenance: MaintenanceConfig;
   visual: VisualIdentity;

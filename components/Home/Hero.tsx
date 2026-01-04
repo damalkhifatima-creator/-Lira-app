@@ -53,7 +53,6 @@ const Hero: React.FC<{ onStart: () => void }> = ({ onStart }) => {
               className="rounded-[1.5rem] w-full h-[250px] md:h-[350px] object-cover opacity-60 grayscale hover:grayscale-0 transition-all duration-700"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent rounded-[1.5rem]" />
-            {/* Exchange rate box removed as requested */}
           </div>
         </div>
       </div>

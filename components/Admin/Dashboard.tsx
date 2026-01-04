@@ -2,7 +2,8 @@
 import React, { useState, useRef } from 'react';
 import { 
   LayoutDashboard, Settings, Image as ImageIcon, LogOut, 
-  Save, Palette, Clock, Upload, X, Menu, Laptop, Tablet, Smartphone
+  Save, Palette, Clock, Upload, X, Menu, Laptop, Tablet, Smartphone,
+  Circle, Square, RectangleHorizontal
 } from 'lucide-react';
 import { AppSettings } from '../../types';
 
@@ -33,6 +34,15 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
     { id: 'visual', label: 'الهوية البصرية', icon: Palette },
     { id: 'maintenance', label: 'وضع الصيانة', icon: Clock },
   ];
+
+  const getLogoShapePreview = () => {
+    switch (settings.logoShape) {
+      case 'circle': return 'rounded-full';
+      case 'square': return 'rounded-2xl';
+      case 'rectangle': return 'rounded-xl';
+      default: return 'rounded-2xl';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#020617] flex flex-col md:flex-row font-cairo text-white overflow-hidden">
@@ -98,7 +108,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
           </button>
         </header>
 
-        <div className="max-w-5xl mx-auto grid grid-cols-1 gap-6">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 gap-6 pb-20">
           {activeTab === 'system' && (
             <div className="space-y-6 animate-in fade-in duration-500">
               <div className="glass p-6 md:p-8 rounded-3xl border border-white/5">
@@ -128,32 +138,68 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, onLogout }
               <div className="glass p-6 md:p-8 rounded-3xl border border-white/5">
                 <h3 className="text-lg font-bold mb-6 flex items-center gap-3">
                    <Upload size={18} className="text-emerald-400" />
-                   إدارة الشعار البصري
+                   إدارة وتخصيص الشعار
                 </h3>
-                <div className="flex flex-col sm:flex-row items-center gap-8">
-                   <div className="w-32 h-32 md:w-40 md:h-40 glass rounded-2xl flex items-center justify-center border-2 border-dashed border-white/10 shrink-0">
+                
+                <div className="flex flex-col lg:flex-row gap-8">
+                   <div className={`w-32 h-32 md:w-40 md:h-40 glass flex items-center justify-center border-2 border-dashed border-white/10 shrink-0 transition-all overflow-hidden ${getLogoShapePreview()}`}>
                       {settings.logoUrl ? (
-                        <img src={settings.logoUrl} className="max-w-full max-h-full p-3 object-contain" />
+                        <img src={settings.logoUrl} className="max-w-full max-h-full p-3 object-contain" style={{ width: settings.logoSize * 2, height: settings.logoShape === 'rectangle' ? 'auto' : settings.logoSize * 2 }} />
                       ) : (
                         <ImageIcon className="text-gray-700" size={32} />
                       )}
                    </div>
-                   <div className="space-y-4 text-center sm:text-right flex-1">
-                      <p className="text-sm text-gray-400 leading-relaxed">يمكنك رفع شعار مخصص للمنصة. ننصح باستخدام صور بخلفية شفافة (SVG or PNG) بحجم لا يتجاوز 1 ميجا.</p>
-                      <input type="file" ref={logoInputRef} onChange={handleLogoUpload} className="hidden" accept="image/*" />
-                      <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                   
+                   <div className="flex-1 space-y-6">
+                      <div className="space-y-4">
+                        <label className="text-xs font-bold text-gray-400">شكل الشعار</label>
+                        <div className="flex flex-wrap gap-3">
+                            {[
+                                { id: 'circle', label: 'دائري', icon: Circle },
+                                { id: 'square', label: 'مربع', icon: Square },
+                                { id: 'rectangle', label: 'مستطيل', icon: RectangleHorizontal }
+                            ].map((shape) => (
+                                <button
+                                    key={shape.id}
+                                    onClick={() => setSettings({ ...settings, logoShape: shape.id as any })}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all ${settings.logoShape === shape.id ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-white/5 border-white/10 text-gray-400'}`}
+                                >
+                                    <shape.icon size={16} />
+                                    <span className="text-xs font-bold">{shape.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <label className="text-xs font-bold text-gray-400">حجم الشعار في الهيدر</label>
+                            <span className="text-xs font-mono text-emerald-400">{settings.logoSize}px</span>
+                        </div>
+                        <input 
+                            type="range" 
+                            min="24" 
+                            max="80" 
+                            value={settings.logoSize}
+                            onChange={(e) => setSettings({ ...settings, logoSize: Number(e.target.value) })}
+                            className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        <input type="file" ref={logoInputRef} onChange={handleLogoUpload} className="hidden" accept="image/*" />
                         <button 
                             onClick={() => logoInputRef.current?.click()}
                             className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold text-sm transition-all"
                         >
-                            اختيار ملف جديد
+                            رفع صورة جديدة
                         </button>
                         {settings.logoUrl && (
                             <button 
                                 onClick={() => setSettings({...settings, logoUrl: ''})}
                                 className="px-6 py-3 text-red-400 hover:bg-red-500/10 rounded-xl font-bold text-sm transition-all"
                             >
-                                حذف الشعار
+                                حذف الصورة
                             </button>
                         )}
                       </div>

@@ -23,12 +23,30 @@ const Header: React.FC<HeaderProps> = ({ onAdminClick, onUserClick, settings, ac
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const getLogoShapeClass = () => {
+    switch (settings.logoShape) {
+      case 'circle': return 'rounded-full';
+      case 'square': return 'rounded-lg';
+      case 'rectangle': return 'rounded-md';
+      default: return 'rounded-xl';
+    }
+  };
+
+  const logoStyle: React.CSSProperties = {
+    width: `${settings.logoSize}px`,
+    height: settings.logoShape === 'rectangle' ? 'auto' : `${settings.logoSize}px`,
+    minWidth: `${settings.logoSize}px`,
+    objectFit: 'contain'
+  };
+
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'py-3 glass shadow-lg' : 'py-5 bg-transparent'}`}>
       <div className="container mx-auto px-4 flex items-center justify-between">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('home')}>
           {settings.logoUrl ? (
-            <img src={settings.logoUrl} className="w-10 h-10 object-contain rounded-lg" alt="Logo" />
+            <div className={`overflow-hidden flex items-center justify-center bg-white/5 border border-white/10 ${getLogoShapeClass()}`} style={{ width: settings.logoSize, height: settings.logoShape === 'rectangle' ? 'auto' : settings.logoSize }}>
+                <img src={settings.logoUrl} className="max-w-full max-h-full" style={logoStyle} alt="Logo" />
+            </div>
           ) : (
             <div className="w-10 h-10 emerald-gradient rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <Wallet className="text-white w-6 h-6" />

@@ -64,6 +64,8 @@ export const INITIAL_BANKNOTES: Banknote[] = [
 export const INITIAL_SETTINGS: AppSettings = {
   siteName: 'خبير العملة السورية 2026',
   logoUrl: '',
+  logoShape: 'circle',
+  logoSize: 40,
   aboutText: 'منصة تقنية متكاملة تهدف إلى تسهيل عملية الانتقال النقدي للمواطن السوري في عام 2026.',
   maintenance: {
     isPaused: false,

@@ -38,13 +38,26 @@ const ValuationCalculator: React.FC<ValuationCalculatorProps> = ({ settings, for
     window.print();
   };
 
+  const getLogoShapeClass = () => {
+    switch (settings.logoShape) {
+      case 'circle': return 'rounded-full';
+      case 'square': return 'rounded-lg';
+      case 'rectangle': return 'rounded-md';
+      default: return 'rounded-xl';
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Printable Report Header - Hidden by default */}
       <div className="hidden print:block mb-8 space-y-6">
         <div className="flex justify-between items-center border-b-2 border-emerald-500 pb-6">
           <div className="flex items-center gap-4">
-            {settings.logoUrl && <img src={settings.logoUrl} className="w-16 h-16" />}
+            {settings.logoUrl && (
+                <div className={`overflow-hidden flex items-center justify-center border border-gray-200 ${getLogoShapeClass()}`} style={{ width: settings.logoSize, height: settings.logoShape === 'rectangle' ? 'auto' : settings.logoSize }}>
+                    <img src={settings.logoUrl} className="max-w-full max-h-full" style={{ width: settings.logoSize }} alt="Logo" />
+                </div>
+            )}
             <div>
               <h1 className="text-2xl font-black text-slate-900">{settings.siteName}</h1>
               <p className="text-sm text-gray-600">تقرير جرد مالي رسمي - عام 2026</p>

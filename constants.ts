@@ -1,7 +1,8 @@
 
 import { Banknote, AppSettings } from './types';
 
-export const CONVERSION_FACTOR = 100; 
+export const CONVERSION_FACTOR = 100; // كل 100 ليرة قديمة = 1 ليرة جديدة
+export const OFFICIAL_USD_RATE = 50;  // السعر الرسمي المعتمد: 1 دولار = 50 ليرة جديدة
 export const DENOMINATIONS = [10, 25, 50, 100, 200, 500];
 
 export const INITIAL_BANKNOTES: Banknote[] = [
@@ -12,7 +13,7 @@ export const INITIAL_BANKNOTES: Banknote[] = [
     frontImage: 'https://images.unsplash.com/photo-1621933486609-2d8759af9998?auto=format&fit=crop&q=80&w=800',
     backImage: 'https://images.unsplash.com/photo-1554224155-1696413565d3?auto=format&fit=crop&q=80&w=800',
     securityFeatures: ['علامة مائية مدمجة', 'خيط أمان متحرك', 'حبر حراري'],
-    purchasingPower: 'تعادل شراء ربطة خبز أو علبة كبريت.'
+    purchasingPower: 'تعادل شراء ربطة خبز أو مستلزمات أساسية بسيطة.'
   },
   {
     id: 2,
@@ -21,7 +22,7 @@ export const INITIAL_BANKNOTES: Banknote[] = [
     frontImage: 'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?auto=format&fit=crop&q=80&w=800',
     backImage: 'https://images.unsplash.com/photo-1607861717598-e47ccaff66b1?auto=format&fit=crop&q=80&w=800',
     securityFeatures: ['طباعة بارزة', 'علامة تطابق خفية', 'شريط هولوغرافي'],
-    purchasingPower: 'كافية لوجبة خفيفة سريعة.'
+    purchasingPower: 'كافية لوجبة خفيفة سريعة أو مصاريف يومية بسيطة.'
   },
   {
     id: 3,
@@ -29,8 +30,8 @@ export const INITIAL_BANKNOTES: Banknote[] = [
     name: '50 ليرة جديدة',
     frontImage: 'https://images.unsplash.com/photo-1593672715438-d88a75639fac?auto=format&fit=crop&q=80&w=800',
     backImage: 'https://images.unsplash.com/photo-1561414927-6d86591d0c4f?auto=format&fit=crop&q=80&w=800',
-    securityFeatures: ['تغير اللون عند الإمالة', 'خيط عريض مشفر', 'ملمس خشن للأطراف'],
-    purchasingPower: 'تغطي مصاريف تنقل داخل المدينة.'
+    securityFeatures: ['تغير اللون عند الإمالة', 'خيط عريض مشفر'],
+    purchasingPower: 'تغطي مصاريف تنقل داخل المدينة أو مشتريات بقالة محدودة.'
   },
   {
     id: 4,
@@ -38,8 +39,8 @@ export const INITIAL_BANKNOTES: Banknote[] = [
     name: '100 ليرة جديدة',
     frontImage: 'https://images.unsplash.com/photo-1633155527990-2e43bc3dd3b0?auto=format&fit=crop&q=80&w=800',
     backImage: 'https://images.unsplash.com/photo-1518458028785-8fbcd101ebb9?auto=format&fit=crop&q=80&w=800',
-    securityFeatures: ['علامة مائية ثلاثية الأبعاد', 'نافذة شفافة', 'رقم تسلسلي بارز'],
-    purchasingPower: 'قيمة وجبة غداء كاملة لشخص واحد.'
+    securityFeatures: ['علامة مائية ثلاثية الأبعاد', 'نافذة شفافة'],
+    purchasingPower: 'قيمة وجبة غداء كاملة لشخص واحد في مطعم متوسط.'
   },
   {
     id: 5,
@@ -47,8 +48,8 @@ export const INITIAL_BANKNOTES: Banknote[] = [
     name: '200 ليرة جديدة',
     frontImage: 'https://images.unsplash.com/photo-1621933486609-2d8759af9998?auto=format&fit=crop&q=80&w=800',
     backImage: 'https://images.unsplash.com/photo-155526324-4b87b5e36e44?auto=format&fit=crop&q=80&w=800',
-    securityFeatures: ['حبر يتغير لوناً', 'خيط أمان مزدوج', 'طباعة ميكروسكوبية'],
-    purchasingPower: 'تكفي لتسوق منزلي بسيط.'
+    securityFeatures: ['حبر يتغير لوناً', 'خيط أمان مزدوج'],
+    purchasingPower: 'تكفي لتسوق منزلي يومي للعائلة.'
   },
   {
     id: 6,
@@ -56,8 +57,8 @@ export const INITIAL_BANKNOTES: Banknote[] = [
     name: '500 ليرة جديدة',
     frontImage: 'https://images.unsplash.com/photo-1502920513535-906370007802?auto=format&fit=crop&q=80&w=800',
     backImage: 'https://images.unsplash.com/photo-1611974715853-26d305b9f6f1?auto=format&fit=crop&q=80&w=800',
-    securityFeatures: ['أعلى معايير الأمان العالمية', 'رقاقة ذكية خفية', 'علامة للمكفوفين'],
-    purchasingPower: 'قيمة شرائية عالية للسلع المعمرة.'
+    securityFeatures: ['أعلى معايير الأمان العالمية', 'رقاقة ذكية خفية'],
+    purchasingPower: 'قيمة شرائية عالية، تستخدم للمشتريات الكبيرة والمدخرات.'
   }
 ];
 
@@ -81,7 +82,7 @@ export const INITIAL_SETTINGS: AppSettings = {
   },
   services: {
     supportLink: 'https://wa.me/963',
-    newsTicker: 'نظام الانتقال النقدي 2026 يعمل بكفاءة عالية في جميع المحافظات.',
+    newsTicker: 'نظام الانتقال النقدي 2026 يعمل بكفاءة عالية. السعر الرسمي للدولار: 50 ل.س جديدة.',
     showConverter: true,
     showGallery: true,
     showNews: true

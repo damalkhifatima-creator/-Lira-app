@@ -5,7 +5,7 @@ import {
   Save, Clock, Upload, X, Menu, Laptop, Tablet, Smartphone,
   Circle, Square, RectangleHorizontal, Grid, Edit3, Users, Search,
   User as UserIcon, Shield, Headset, Megaphone, ToggleLeft, ToggleRight,
-  Coins, Trash2, Plus, Info, ImagePlus, CheckCircle2, AlertCircle
+  Coins, Trash2, Plus, Info, ImagePlus, CheckCircle2, AlertCircle, Database, Code
 } from 'lucide-react';
 import { AppSettings, Banknote, User, FloatingImage } from '../../types';
 import { supabase } from '../../supabase';
@@ -20,12 +20,13 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes, setBanknotes, users, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'system' | 'banknotes' | 'users' | 'services' | 'maintenance'>('system');
+  const [activeTab, setActiveTab] = useState<'system' | 'banknotes' | 'users' | 'services' | 'maintenance' | 'db_helper'>('system');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [lastError, setLastError] = useState<string | null>(null);
   
   const logoInputRef = useRef<HTMLInputElement>(null);
   const globalBgInputRef = useRef<HTMLInputElement>(null);
@@ -49,7 +50,8 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
       const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(data.path);
       return publicUrl;
     } catch (err: any) {
-      alert(`خطأ في رفع الملف: ${err.message || JSON.stringify(err)}`);
+      setLastError(err.message);
+      alert(`خطأ في رفع الملف: ${err.message}`);
       return null;
     }
   };
@@ -67,8 +69,9 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
   const handleGlobalSave = async () => {
     setIsSaving(true);
     setSaveStatus('idle');
+    setLastError(null);
     try {
-      // 1. مزامنة إعدادات التطبيق الأساسية
+      // 1. App Settings Sync
       const { error: settingsError } = await supabase
         .from('app_settings')
         .upsert({
@@ -95,20 +98,18 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
 
       if (settingsError) throw settingsError;
 
-      // 2. مزامنة فئات العملة (Batch Upsert)
-      const banknotesToSave = banknotes.map(n => ({
-        id: n.id,
-        value: n.value,
-        name: n.name,
-        front_image: n.frontImage,
-        back_image: n.backImage,
-        security_features: n.securityFeatures,
-        purchasing_power: n.purchasingPower
-      }));
-
+      // 2. Banknotes Sync
       const { error: notesError } = await supabase
         .from('banknotes')
-        .upsert(banknotesToSave);
+        .upsert(banknotes.map(n => ({
+          id: n.id,
+          value: n.value,
+          name: n.name,
+          front_image: n.frontImage,
+          back_image: n.backImage,
+          security_features: n.securityFeatures,
+          purchasing_power: n.purchasingPower
+        })));
 
       if (notesError) throw notesError;
 
@@ -118,7 +119,13 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
       console.error('Save Operation Failure:', err);
       setSaveStatus('error');
       const errorMessage = err?.message || err?.details || JSON.stringify(err);
-      alert(`فشل المزامنة السحابية:\n${errorMessage}`);
+      setLastError(errorMessage);
+      
+      if (err.code === '42501') {
+        setActiveTab('db_helper');
+      } else {
+        alert(`فشل المزامنة: ${errorMessage}`);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -134,21 +141,14 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
         duration: Math.random() * 10 + 5
       });
       if (error) throw error;
-    } catch (err: any) { alert(`خطأ: ${err.message}`); }
+    } catch (err: any) { setLastError(err.message); }
   };
 
   const removeFloatingImage = async (id: string) => {
     try {
       const { error } = await supabase.from('floating_images').delete().eq('id', id);
       if (error) throw error;
-    } catch (err: any) { alert(`خطأ: ${err.message}`); }
-  };
-
-  const toggleService = (key: keyof typeof settings.services) => {
-    setSettings({
-      ...settings,
-      services: { ...settings.services, [key]: !settings.services[key] }
-    });
+    } catch (err: any) { setLastError(err.message); }
   };
 
   return (
@@ -173,6 +173,7 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
             { id: 'users', label: 'المواطنين', icon: Users },
             { id: 'services', label: 'الخدمات', icon: Megaphone },
             { id: 'maintenance', label: 'الصيانة', icon: Clock },
+            { id: 'db_helper', label: 'قاعدة البيانات', icon: Database },
           ].map((item) => (
             <button
               key={item.id}
@@ -198,20 +199,69 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
             <h2 className="text-3xl font-black">لوحة التحكم السحابية 2026</h2>
             <p className="text-gray-500 text-sm">أهلاً بك في نظام الإدارة المركزي الفائق.</p>
           </div>
-          <button 
-            onClick={handleGlobalSave}
-            disabled={isSaving}
-            className={`
-              w-full md:w-auto px-10 py-4 rounded-2xl font-black flex items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl
-              ${saveStatus === 'success' ? 'bg-emerald-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-emerald-500 hover:bg-emerald-400'}
-            `}
-          >
-            {isSaving ? <Clock className="animate-spin" size={18} /> : saveStatus === 'success' ? <CheckCircle2 size={18} /> : saveStatus === 'error' ? <AlertCircle size={18} /> : <Save size={18} />}
-            {isSaving ? 'جاري المزامنة...' : saveStatus === 'success' ? 'تم الحفظ بنجاح' : saveStatus === 'error' ? 'فشل الحفظ' : 'حفظ التغييرات'}
-          </button>
+          <div className="flex gap-4 w-full md:w-auto">
+            {lastError && (
+              <button onClick={() => setActiveTab('db_helper')} className="p-4 bg-red-500/10 text-red-400 rounded-2xl border border-red-500/20 flex items-center gap-2 animate-pulse">
+                <AlertCircle size={18} />
+                <span className="text-xs font-black">لديك خطأ في الصلاحيات</span>
+              </button>
+            )}
+            <button 
+              onClick={handleGlobalSave}
+              disabled={isSaving}
+              className={`
+                flex-1 md:flex-none px-10 py-4 rounded-2xl font-black flex items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl
+                ${saveStatus === 'success' ? 'bg-emerald-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-emerald-500 hover:bg-emerald-400'}
+              `}
+            >
+              {isSaving ? <Clock className="animate-spin" size={18} /> : saveStatus === 'success' ? <CheckCircle2 size={18} /> : saveStatus === 'error' ? <AlertCircle size={18} /> : <Save size={18} />}
+              {isSaving ? 'جاري المزامنة...' : saveStatus === 'success' ? 'تم الحفظ بنجاح' : saveStatus === 'error' ? 'فشل الحفظ' : 'حفظ التغييرات'}
+            </button>
+          </div>
         </header>
 
         <div className="max-w-6xl mx-auto space-y-8 pb-32">
+          {activeTab === 'db_helper' && (
+            <div className="space-y-8 animate-in fade-in zoom-in duration-500">
+               <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-red-500/20 bg-red-500/5 space-y-6 shadow-2xl">
+                  <div className="flex items-center gap-4 text-red-400">
+                    <Database size={40} />
+                    <div>
+                      <h3 className="text-2xl font-black">حل مشكلة صلاحيات قاعدة البيانات (RLS)</h3>
+                      <p className="text-sm opacity-80">الخطأ 42501 يعني أن قاعدة البيانات ترفض الكتابة لعدم وجود سياسات وصول.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-sm font-bold text-gray-300">انسخ الكود التالي وضعه في Supabase SQL Editor:</p>
+                    <div className="relative group">
+                      <pre className="bg-slate-950 p-6 rounded-2xl border border-white/5 font-mono text-xs text-emerald-400 overflow-x-auto leading-relaxed">
+{`-- تفعيل الوصول العام لجميع الجداول في بيئة التطوير
+CREATE POLICY "Allow all for anon" ON "public"."app_settings" AS PERMISSIVE FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon" ON "public"."banknotes" AS PERMISSIVE FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon" ON "public"."floating_images" AS PERMISSIVE FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for anon" ON "public"."profiles" AS PERMISSIVE FOR ALL TO anon USING (true) WITH CHECK (true);`}
+                      </pre>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(`CREATE POLICY "Allow all for anon" ON "public"."app_settings" AS PERMISSIVE FOR ALL TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow all for anon" ON "public"."banknotes" AS PERMISSIVE FOR ALL TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow all for anon" ON "public"."floating_images" AS PERMISSIVE FOR ALL TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow all for anon" ON "public"."profiles" AS PERMISSIVE FOR ALL TO anon USING (true) WITH CHECK (true);`);
+                          alert('تم نسخ الكود!');
+                        }}
+                        className="absolute top-4 left-4 p-2 bg-emerald-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Code size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                    <a href="https://supabase.com/dashboard" target="_blank" className="px-6 py-3 bg-white text-slate-950 rounded-xl font-black text-sm hover:bg-gray-200 transition-colors">فتح لوحة Supabase</a>
+                    <button onClick={() => setActiveTab('system')} className="px-6 py-3 glass rounded-xl font-black text-sm hover:bg-white/5">العودة للإعدادات</button>
+                  </div>
+               </div>
+            </div>
+          )}
+
           {activeTab === 'system' && (
             <div className="space-y-8 animate-in fade-in duration-500">
               <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 shadow-2xl space-y-10">
@@ -381,72 +431,6 @@ const Dashboard: React.FC<DashboardProps> = ({ settings, setSettings, banknotes,
                 )) : (
                   <div className="col-span-full py-12 text-center text-gray-500 font-bold italic">لا يوجد مستخدمين مسجلين حالياً.</div>
                 )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'services' && (
-            <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 space-y-10 animate-in fade-in duration-500 shadow-2xl">
-              <h3 className="text-xl font-black border-b border-white/5 pb-8 flex items-center gap-3">
-                 <Megaphone className="text-emerald-400" size={22} /> إدارة الخدمات والاتصال
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                 <div className="space-y-4">
-                    <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">رابط الدعم الفني</label>
-                    <input 
-                      type="text" value={settings.services.supportLink}
-                      onChange={(e) => setSettings({...settings, services: {...settings.services, supportLink: e.target.value}})}
-                      className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 font-bold"
-                    />
-                 </div>
-                 <div className="space-y-4">
-                    <label className="text-xs font-black text-gray-400 px-1 uppercase tracking-widest">شريط الأخبار العاجل</label>
-                    <input 
-                      type="text" value={settings.services.newsTicker}
-                      onChange={(e) => setSettings({...settings, services: {...settings.services, newsTicker: e.target.value}})}
-                      className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500/50 font-bold"
-                    />
-                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-                 {[
-                    { id: 'showConverter', label: 'المحول', icon: Coins },
-                    { id: 'showGallery', label: 'الفئات', icon: Grid },
-                    { id: 'showNews', label: 'الأخبار', icon: Megaphone },
-                 ].map((service) => (
-                    <button 
-                       key={service.id}
-                       onClick={() => toggleService(service.id as any)}
-                       className={`p-8 rounded-[2rem] border-2 flex flex-col items-center gap-6 transition-all ${settings.services[service.id as keyof typeof settings.services] ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white/5 border-white/10 text-gray-500 opacity-60'}`}
-                    >
-                       <service.icon size={32} />
-                       <span className="font-black">{service.label}</span>
-                       {settings.services[service.id as keyof typeof settings.services] ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
-                    </button>
-                 ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'maintenance' && (
-            <div className="glass p-8 md:p-12 rounded-[2.5rem] border border-white/5 space-y-10 animate-in fade-in duration-500 shadow-2xl">
-              <div className="flex justify-between items-center border-b border-white/5 pb-8">
-                <h3 className="text-xl font-black flex items-center gap-3">
-                   <Clock className="text-amber-500" size={22} /> وضع الصيانة
-                </h3>
-                <button 
-                  onClick={() => setSettings({...settings, maintenance: {...settings.maintenance, isPaused: !settings.maintenance.isPaused}})}
-                  className={`px-8 py-3 rounded-2xl font-black ${settings.maintenance.isPaused ? 'bg-red-500' : 'bg-amber-500'}`}
-                >
-                  {settings.maintenance.isPaused ? 'إيقاف الصيانة' : 'تفعيل الصيانة'}
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                 <input type="datetime-local" value={settings.maintenance.startTime} onChange={(e) => setSettings({...settings, maintenance: {...settings.maintenance, startTime: e.target.value}})} className="bg-white/5 border border-white/10 p-5 rounded-2xl outline-none" />
-                 <input type="datetime-local" value={settings.maintenance.endTime} onChange={(e) => setSettings({...settings, maintenance: {...settings.maintenance, endTime: e.target.value}})} className="bg-white/5 border border-white/10 p-5 rounded-2xl outline-none" />
-                 <textarea value={settings.maintenance.reason} onChange={(e) => setSettings({...settings, maintenance: {...settings.maintenance, reason: e.target.value}})} className="md:col-span-2 bg-white/5 border border-white/10 p-5 rounded-2xl outline-none h-32" />
               </div>
             </div>
           )}
